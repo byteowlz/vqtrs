@@ -20,10 +20,15 @@ install-qwen3:
     cargo install --path crates/vqtrs-cli --features qwen3 --force
     cargo install --path crates/vqtrs-api --features qwen3 --force
 
-# Install for NVIDIA: ONNX CUDA EP + Qwen3 on CUDA
+# Install for NVIDIA: ONNX + Qwen3 both on GPU (native; CUDA toolkit <= 13.2)
 install-cuda:
     cargo install --path crates/vqtrs-cli --features cuda,qwen3-cuda --force
     cargo install --path crates/vqtrs-api --features cuda,qwen3-cuda --force
+
+# Same, for CUDA 13.3+ (pins cudarc to 13.2 bindings — ABI-compatible with 13.x)
+install-cuda13:
+    CUDARC_CUDA_VERSION=13020 cargo install --path crates/vqtrs-cli --features cuda,qwen3-cuda --force
+    CUDARC_CUDA_VERSION=13020 cargo install --path crates/vqtrs-api --features cuda,qwen3-cuda --force
 
 # Install for Apple Silicon: ONNX CoreML + Qwen3 on Metal
 install-mac:

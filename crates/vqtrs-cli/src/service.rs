@@ -13,7 +13,8 @@ use std::time::Duration;
 use anyhow::{Context, Result, bail};
 use sysinfo::{Pid, System};
 
-/// systemd user unit name used by `enable`/`disable`.
+/// systemd user unit name used by `enable`/`disable` (Linux only).
+#[cfg(target_os = "linux")]
 const UNIT_NAME: &str = "vqtrs.service";
 
 /// Resolved running state of the daemon.

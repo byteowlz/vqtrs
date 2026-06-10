@@ -24,7 +24,8 @@ Install the `vqtrs` CLI + `vqtrs-api` server:
 ```bash
 just install          # CPU / ONNX only
 just install-all      # interactive: detects host, picks GPU + Qwen3
-just install-cuda     # NVIDIA: ONNX CUDA + Qwen3 CUDA
+just install-cuda     # NVIDIA: ONNX + Qwen3 on GPU (CUDA <= 13.2)
+just install-cuda13   # NVIDIA: same, for CUDA 13.3+
 just install-mac      # Apple Silicon: ONNX CoreML + Qwen3 Metal
 ```
 
@@ -208,8 +209,15 @@ cargo install --path crates/vqtrs-cli --features coreml,qwen3-metal
 The candle features (`qwen3-*`) compile GPU kernels directly (need the CUDA
 toolkit / macOS at build time). The ort ONNX features register an execution
 provider that needs a matching GPU-enabled `onnxruntime` at runtime and falls
-back to CPU if it isn't present. The interactive installer that auto-detects all
-this is tracked separately.
+back to CPU if it isn't present. `just install-all` auto-detects the host and
+composes these.
+
+> **CUDA 13.3+:** the pinned `cudarc 0.19.7` knows CUDA up to 13.2 and rejects
+> 13.3 by version string only. Since all 13.x share one library ABI, pin its
+> bindings to 13.2 and it builds + runs fine on a 13.3 toolkit:
+> `CUDARC_CUDA_VERSION=13020 just install-cuda13` (or `just install-all`, which
+> sets it automatically). CUDA 14+ isn't covered yet — there `cuda,qwen3` keeps
+> ONNX on the GPU with Qwen3 on CPU.
 
 ## Workspace layout
 

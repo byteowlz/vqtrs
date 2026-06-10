@@ -49,7 +49,22 @@ case "$ACCEL" in
     ;;
   2)
     FEATURES="cuda"
-    $WANT_QWEN3 && FEATURES="cuda,qwen3-cuda"
+    if $WANT_QWEN3; then
+      FEATURES="cuda,qwen3-cuda"
+      # cudarc 0.19.7 (pinned via fastembed → candle) knows CUDA up to 13.2.
+      # Newer 13.x toolkits share the same library ABI, so pin its bindings to
+      # 13.2; CUDA 14+ isn't covered, so run Qwen3 on CPU there.
+      CUDA_VER="$(nvcc --version 2>/dev/null | grep -oE 'release [0-9]+\.[0-9]+' | grep -oE '[0-9]+\.[0-9]+' | head -1)"
+      CUDA_MAJOR="${CUDA_VER%%.*}"
+      CUDA_MINOR="${CUDA_VER##*.}"
+      if [[ "$CUDA_MAJOR" == "13" && "${CUDA_MINOR:-0}" -gt 2 ]]; then
+        echo "CUDA ${CUDA_VER}: pinning CUDARC_CUDA_VERSION=13020 (13.2 bindings, ABI-compatible)."
+        export CUDARC_CUDA_VERSION=13020
+      elif [[ -n "$CUDA_MAJOR" && "$CUDA_MAJOR" -ge 14 ]]; then
+        echo "CUDA ${CUDA_VER} is newer than cudarc supports — Qwen3 on CPU (ONNX still on GPU)."
+        FEATURES="cuda,qwen3"
+      fi
+    fi
     ;;
   3)
     if [[ "$OS" != "Darwin" ]]; then
