@@ -1,0 +1,39 @@
+[package]
+name = "vqtrs-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
+description = "Command-line embeddings + reranking for vqtrs"
+
+[lints]
+workspace = true
+
+[features]
+default = []
+# Compile the Qwen3 candle backend into the `vqtrs` binary.
+qwen3 = ["vqtrs-core/qwen3"]
+# ONNX GPU/accel (ort execution providers).
+cuda = ["vqtrs-core/cuda"]
+tensorrt = ["vqtrs-core/tensorrt"]
+coreml = ["vqtrs-core/coreml"]
+directml = ["vqtrs-core/directml"]
+# Qwen3 (candle) GPU.
+qwen3-cuda = ["vqtrs-core/qwen3-cuda"]
+qwen3-metal = ["vqtrs-core/qwen3-metal"]
+
+[[bin]]
+name = "vqtrs"
+path = "src/main.rs"
+
+[dependencies]
+vqtrs-core.workspace = true
+anyhow.workspace = true
+clap.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+dirs.workspace = true
+sysinfo.workspace = true

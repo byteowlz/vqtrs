@@ -1,0 +1,30 @@
+# vqtrs-api configuration.
+#
+# Copy to $XDG_CONFIG_HOME/vqtrs/config.toml (usually ~/.config/vqtrs/config.toml).
+# Every value is optional — omit a key to use its default. CLI flags and env
+# vars (VQTRS_MODEL, VQTRS_PORT, …) override anything set here.
+#
+# JSON schema: run `vqtrs-api --print-schema` (see examples/config.schema.json).
+
+# Embedding model loaded at startup (catalog code or fastembed variant).
+# Run `vqtrs models` for the full list.
+model = "Qdrant/all-MiniLM-L6-v2-onnx"
+
+# Models loaded lazily on first use of their endpoint.
+rerank_model = "BAAI/bge-reranker-base"
+sparse_model = "Qdrant/Splade_PP_en_v1"
+m3_model     = "BAAI/bge-m3"
+
+# TCP listener.
+host = "127.0.0.1"
+port = 3000
+
+# Unix socket. Empty string = default ($XDG_RUNTIME_DIR/vqtrs.sock).
+socket    = ""
+no_socket = false
+
+# Multi-model gateway. The server honours each request's `model` field, loading
+# models on demand and keeping them warm. `warm` models are preloaded at startup
+# and never evicted; `max_loaded` caps the rest per backend (0 = unbounded).
+warm       = []
+max_loaded = 0

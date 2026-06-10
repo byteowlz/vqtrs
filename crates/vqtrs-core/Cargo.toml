@@ -1,0 +1,39 @@
+[package]
+name = "vqtrs-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
+description = "Lean local embeddings + reranking engine (fastembed/ONNX + Qwen3 candle backend)"
+
+[lints]
+workspace = true
+
+[features]
+default = []
+# Qwen3-Embedding via the candle backend. Off by default — pulls candle and is
+# the heaviest part of the build. Enable for the SOTA 0.6B/4B/8B models.
+qwen3 = ["fastembed/qwen3", "dep:candle-core"]
+
+# ONNX GPU/accel via ort execution providers (independent of qwen3).
+cuda = ["dep:ort", "ort/cuda"]
+tensorrt = ["dep:ort", "ort/tensorrt"]
+coreml = ["dep:ort", "ort/coreml"]
+directml = ["dep:ort", "ort/directml"]
+
+# Qwen3 (candle) GPU. Each implies `qwen3`.
+qwen3-cuda = ["qwen3", "fastembed/cuda"]
+qwen3-metal = ["qwen3", "fastembed/metal"]
+
+[dependencies]
+fastembed.workspace = true
+tokenizers.workspace = true
+candle-core = { workspace = true, optional = true }
+# Direct ort handle for constructing execution providers; pinned to fastembed's
+# ort. Activated only by the ONNX accel features above.
+ort = { version = "=2.0.0-rc.12", default-features = false, optional = true }
+thiserror.workspace = true
+dirs.workspace = true

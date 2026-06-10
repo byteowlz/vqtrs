@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ServerConfig",
+  "description": "On-disk server configuration. Every field has a default, so a partial or\nabsent file is fine.",
+  "type": "object",
+  "properties": {
+    "host": {
+      "description": "Address to bind the TCP listener to.",
+      "type": "string",
+      "default": "127.0.0.1"
+    },
+    "m3_model": {
+      "description": "BGE-M3 model, loaded lazily on the first `/embeddings/m3` request.",
+      "type": "string",
+      "default": "BAAI/bge-m3"
+    },
+    "max_loaded": {
+      "description": "Max models kept loaded per backend; `0` = unbounded. Warm models are\npinned and do not count toward eviction.",
+      "type": "integer",
+      "format": "uint",
+      "default": 0,
+      "minimum": 0
+    },
+    "model": {
+      "description": "Embedding model loaded at startup (catalog code or fastembed variant).",
+      "type": "string",
+      "default": "Qdrant/all-MiniLM-L6-v2-onnx"
+    },
+    "no_socket": {
+      "description": "Disable the Unix socket entirely (TCP only).",
+      "type": "boolean",
+      "default": false
+    },
+    "port": {
+      "description": "TCP port to listen on.",
+      "type": "integer",
+      "format": "uint16",
+      "default": 3000,
+      "maximum": 65535,
+      "minimum": 0
+    },
+    "rerank_model": {
+      "description": "Reranker model, loaded lazily on the first `/rerank` request.",
+      "type": "string",
+      "default": "BAAI/bge-reranker-base"
+    },
+    "socket": {
+      "description": "Unix socket path; empty means the default (`$XDG_RUNTIME_DIR/vqtrs.sock`).",
+      "type": "string",
+      "default": ""
+    },
+    "sparse_model": {
+      "description": "Sparse model, loaded lazily on the first `/embeddings/sparse` request.",
+      "type": "string",
+      "default": "Qdrant/Splade_PP_en_v1"
+    },
+    "warm": {
+      "description": "Extra embedding models to preload at startup and keep warm (never\nevicted). The default `model` is always warm.",
+      "type": "array",
+      "default": [],
+      "items": {
+        "type": "string"
+      }
+    }
+  }
+}
