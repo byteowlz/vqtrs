@@ -47,7 +47,7 @@ impl Default for ServerConfig {
             sparse_model: "Qdrant/Splade_PP_en_v1".to_owned(),
             m3_model: "BAAI/bge-m3".to_owned(),
             host: "127.0.0.1".to_owned(),
-            port: 3000,
+            port: 8430,
             socket: String::new(),
             no_socket: false,
             warm: Vec::new(),

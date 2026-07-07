@@ -35,7 +35,7 @@
       "description": "TCP port to listen on.",
       "type": "integer",
       "format": "uint16",
-      "default": 3000,
+      "default": 8430,
       "maximum": 65535,
       "minimum": 0
     },

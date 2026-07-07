@@ -17,7 +17,7 @@ m3_model     = "BAAI/bge-m3"
 
 # TCP listener.
 host = "127.0.0.1"
-port = 3000
+port = 8430
 
 # Unix socket. Empty string = default ($XDG_RUNTIME_DIR/vqtrs.sock).
 socket    = ""

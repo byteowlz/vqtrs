@@ -89,7 +89,7 @@ struct ServiceOpts {
     #[arg(long, default_value = "127.0.0.1")]
     host: String,
     /// Port to listen on
-    #[arg(short, long, default_value = "3000")]
+    #[arg(short, long, default_value = "8430")]
     port: u16,
     /// Embedding model (else the server default / `VQTRS_MODEL`)
     #[arg(long)]
