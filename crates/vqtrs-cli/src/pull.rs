@@ -121,6 +121,11 @@ fn download(row: &Row) -> Result<()> {
     Ok(())
 }
 
+/// Format a fixed-width row so columns line up in fzf.
+fn row_line(code: &str, dims: &str, backend: &str, task: &str, desc: &str) -> String {
+    format!("{code:<52} {dims:>6}  {backend:<6} {task:<12} {desc}")
+}
+
 fn rows() -> Vec<Row> {
     let mut rows: Vec<Row> = dense_models()
         .iter()
@@ -128,9 +133,12 @@ fn rows() -> Vec<Row> {
             code: m.code,
             variant: m.variant,
             task: "embedding",
-            line: format!(
-                "{}\t{}d\t{:?}\tembedding\t{}",
-                m.code, m.dimensions, m.backend, m.description
+            line: row_line(
+                m.code,
+                &format!("{}d", m.dimensions),
+                &format!("{:?}", m.backend),
+                "embedding",
+                m.description,
             ),
         })
         .collect();
@@ -144,14 +152,14 @@ fn rows() -> Vec<Row> {
             code: m.code,
             variant: m.variant,
             task,
-            line: format!("{}\t\t\t{}\t{}", m.code, task, m.description),
+            line: row_line(m.code, "", "", task, m.description),
         }
     }));
     rows.extend(rerank_models().iter().map(|m| Row {
         code: m.code,
         variant: m.variant,
         task: "rerank",
-        line: format!("{}\t\t\trerank\t{}", m.code, m.description),
+        line: row_line(m.code, "", "", "rerank", m.description),
     }));
     rows
 }
