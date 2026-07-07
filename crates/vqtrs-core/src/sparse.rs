@@ -189,7 +189,18 @@ fn into_sparse(raw: fastembed::SparseEmbedding) -> SparseVector {
     }
 }
 
-/// Map any backend error into [`VqtrsError::Backend`].
-fn backend_err<E: std::fmt::Display>(err: E) -> VqtrsError {
-    VqtrsError::Backend(err.to_string())
+/// Map any backend error into [`VqtrsError::Backend`], preserving the full
+/// cause chain so the underlying failure (e.g. a hf-hub transport error) is
+/// not hidden behind fastembed's outer "Failed to retrieve …" context.
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "map_err passes an owned anyhow::Error via FnOnce; borrowing would force closure wrappers at every call site"
+)]
+fn backend_err(err: anyhow::Error) -> VqtrsError {
+    let mut msg = err.to_string();
+    for cause in err.chain().skip(1) {
+        msg.push_str(": ");
+        msg.push_str(&cause.to_string());
+    }
+    VqtrsError::Backend(msg)
 }
