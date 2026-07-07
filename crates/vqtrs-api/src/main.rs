@@ -104,6 +104,7 @@ async fn try_main() -> Result<()> {
         .route("/embeddings/sparse", post(sparse_embeddings))
         .route("/embeddings/m3", post(m3_embeddings))
         .route("/rerank", post(rerank))
+        .route("/v1/rerank", post(rerank))
         .layer(cors)
         .layer(TraceLayer::new_for_http())
         .with_state(state);
