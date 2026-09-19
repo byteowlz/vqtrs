@@ -82,7 +82,7 @@ impl Engine {
             Resolved::Qwen3 { repo, dimensions } => {
                 let (device, dtype) = crate::accel::qwen3_device();
                 let inner = Qwen3TextEmbedding::from_hf(&repo, &device, dtype, QWEN3_MAX_LENGTH)
-                    .map_err(backend_err)?;
+                    .map_err(|e| backend_err(e.into()))?;
                 Ok(Self {
                     model: model.to_owned(),
                     dimensions,
@@ -121,7 +121,7 @@ impl Engine {
                 guard.embed(texts, None).map_err(backend_err)
             }
             #[cfg(feature = "qwen3")]
-            Inner::Qwen3(m) => m.embed(texts).map_err(backend_err),
+            Inner::Qwen3(m) => m.embed(texts).map_err(|e| backend_err(e.into())),
         }
     }
 
