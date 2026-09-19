@@ -51,7 +51,7 @@ fastembed = { version = "5.16", default-features = false, features = [
 ] }
 # candle Device/DType for the qwen3 backend; pinned to fastembed's candle line.
 # Pulled in only when the `qwen3` feature is enabled.
-candle-core = "0.10"
+candle-core = "0.11"
 # Tokenizer for accurate token counts; matched to fastembed's pin so it unifies.
 tokenizers = { version = "0.22.2", default-features = false, features = ["onig"] }
 
