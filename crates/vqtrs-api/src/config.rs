@@ -37,6 +37,20 @@ pub struct ServerConfig {
     /// Max models kept loaded per backend; `0` = unbounded. Warm models are
     /// pinned and do not count toward eviction.
     pub max_loaded: usize,
+    /// Max inference tasks in flight across all endpoints. Requests beyond the
+    /// cap are rejected with `429` + `Retry-After` instead of queueing, so the
+    /// blocking thread pool can never saturate (the vqtrs-76mr wedge). Values
+    /// below 1 are treated as 1.
+    ///
+    /// Resident memory is bounded by `max_inflight x max_batch_texts`: the ONNX
+    /// runtime retains arena memory for the largest batch shape it has run, so
+    /// size both knobs together when budgeting.
+    pub max_inflight: usize,
+    /// Max texts accepted in one request. Larger batches are rejected with
+    /// `413` instead of being attempted, bounding ONNX arena growth (which is
+    /// retained for the lifetime of the process). Values below 1 are treated
+    /// as 1.
+    pub max_batch_texts: usize,
 }
 
 impl Default for ServerConfig {
@@ -52,6 +66,8 @@ impl Default for ServerConfig {
             no_socket: false,
             warm: Vec::new(),
             max_loaded: 0,
+            max_inflight: 4,
+            max_batch_texts: 256,
         }
     }
 }

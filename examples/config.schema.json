@@ -14,6 +14,20 @@
       "type": "string",
       "default": "BAAI/bge-m3"
     },
+    "max_batch_texts": {
+      "description": "Max texts accepted in one request. Larger batches are rejected with\n`413` instead of being attempted, bounding ONNX arena growth (which is\nretained for the lifetime of the process). Values below 1 are treated\nas 1.",
+      "type": "integer",
+      "format": "uint",
+      "default": 256,
+      "minimum": 0
+    },
+    "max_inflight": {
+      "description": "Max inference tasks in flight across all endpoints. Requests beyond the\ncap are rejected with `429` + `Retry-After` instead of queueing, so the\nblocking thread pool can never saturate (the vqtrs-76mr wedge). Values\nbelow 1 are treated as 1.\n\nResident memory is bounded by `max_inflight x max_batch_texts`: the ONNX\nruntime retains arena memory for the largest batch shape it has run, so\nsize both knobs together when budgeting.",
+      "type": "integer",
+      "format": "uint",
+      "default": 4,
+      "minimum": 0
+    },
     "max_loaded": {
       "description": "Max models kept loaded per backend; `0` = unbounded. Warm models are\npinned and do not count toward eviction.",
       "type": "integer",

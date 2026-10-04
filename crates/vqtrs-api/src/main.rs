@@ -14,19 +14,23 @@ use crate::config::ServerConfig;
 use crate::registry::Registry;
 use axum::{
     Json, Router,
-    extract::State,
-    http::StatusCode,
+    extract::{FromRequestParts, State},
+    http::{StatusCode, header},
     response::{IntoResponse, Response},
     routing::{get, post},
 };
 use clap::Parser;
 use log::info;
 use serde::{Deserialize, Serialize};
+use tokio::sync::Semaphore;
 use tower_http::cors::{Any, CorsLayer};
 use tower_http::trace::TraceLayer;
 use vqtrs_core::{
     Engine, M3Engine, Reranker, SparseEngine, dense_models, rerank_models, sparse_models,
 };
+
+/// Seconds a client should wait before retrying after a `429`/`503`.
+const RETRY_AFTER_SECS: u64 = 1;
 
 fn main() -> Result<()> {
     try_main()
@@ -63,6 +67,13 @@ async fn try_main() -> Result<()> {
 
     let max_loaded = cfg.max_loaded;
     let warm = cfg.warm;
+    // A semaphore with zero permits would reject everything forever, so the
+    // effective floor is 1.
+    let max_inflight = cli.max_inflight.unwrap_or(cfg.max_inflight).max(1);
+    let max_batch_texts = cli.max_batch_texts.unwrap_or(cfg.max_batch_texts).max(1);
+    info!(
+        "limits: max_loaded={max_loaded} max_inflight={max_inflight} max_batch_texts={max_batch_texts}"
+    );
 
     let dense = Arc::new(Registry::new(max_loaded));
     info!("loading embedding model: {model}");
@@ -89,6 +100,12 @@ async fn try_main() -> Result<()> {
         sparse: Arc::new(Registry::new(max_loaded)),
         default_m3: Arc::new(m3_model),
         m3: Arc::new(Registry::new(max_loaded)),
+        // Bounds the number of inference tasks handed to `spawn_blocking`, so
+        // the blocking thread pool can never saturate and requests beyond the
+        // cap are rejected instead of queueing unboundedly (vqtrs-76mr).
+        inflight: Arc::new(Semaphore::new(max_inflight)),
+        max_inflight,
+        max_batch_texts,
     };
 
     let cors = CorsLayer::new()
@@ -174,8 +191,14 @@ struct Cli {
     #[arg(long, env = "VQTRS_SOCKET")]
     socket: Option<PathBuf>,
     /// Do not bind a Unix socket (TCP only)
-    #[arg(long)]
+    #[arg(long, env = "VQTRS_NO_SOCKET")]
     no_socket: bool,
+    /// Max inference tasks in flight across all endpoints (see config)
+    #[arg(long, env = "VQTRS_MAX_INFLIGHT")]
+    max_inflight: Option<usize>,
+    /// Max texts accepted in one request (see config)
+    #[arg(long, env = "VQTRS_MAX_BATCH_TEXTS")]
+    max_batch_texts: Option<usize>,
 }
 
 /// Shared server state: a keep-warm registry per backend plus the default model
@@ -190,6 +213,12 @@ struct AppState {
     sparse: Arc<Registry<SparseEngine>>,
     default_m3: Arc<String>,
     m3: Arc<Registry<M3Engine>>,
+    /// Cap on concurrent inference tasks (see `try_main`).
+    inflight: Arc<Semaphore>,
+    /// Mirrors the semaphore's total permits, for reporting.
+    max_inflight: usize,
+    /// Cap on texts per request.
+    max_batch_texts: usize,
 }
 
 /// Choose the request's model when present and non-empty, else the default.
@@ -204,6 +233,31 @@ const fn pick<'a>(requested: Option<&'a str>, default: &'a str) -> &'a str {
 struct ApiError {
     status: StatusCode,
     message: String,
+    /// `Retry-After` seconds, set on capacity errors (`429`/`503`).
+    retry_after: Option<u64>,
+}
+
+impl ApiError {
+    const fn new(status: StatusCode, message: String) -> Self {
+        Self {
+            status,
+            message,
+            retry_after: None,
+        }
+    }
+
+    /// A request attempted more work than the configured cap allows.
+    const fn too_large(message: String) -> Self {
+        Self::new(StatusCode::PAYLOAD_TOO_LARGE, message)
+    }
+
+    /// The server is at its in-flight capacity; the client should retry.
+    fn at_capacity(message: String) -> Self {
+        Self {
+            retry_after: Some(RETRY_AFTER_SECS),
+            ..Self::new(StatusCode::TOO_MANY_REQUESTS, message)
+        }
+    }
 }
 
 impl From<anyhow::Error> for ApiError {
@@ -211,6 +265,7 @@ impl From<anyhow::Error> for ApiError {
         Self {
             status: StatusCode::INTERNAL_SERVER_ERROR,
             message: err.to_string(),
+            retry_after: None,
         }
     }
 }
@@ -222,7 +277,20 @@ impl IntoResponse for ApiError {
                 message: self.message,
             },
         });
-        (self.status, body).into_response()
+        let mut response = (self.status, body).into_response();
+        if let Some(secs) = self.retry_after {
+            if let Ok(value) = header::HeaderValue::from_str(&secs.to_string()) {
+                response.headers_mut().insert(header::RETRY_AFTER, value);
+            }
+            // Shedding without reading the request body: close the connection
+            // instead of draining it, so a burst of rejected requests cannot
+            // tie up the server transferring data it is about to throw away.
+            response.headers_mut().insert(
+                header::CONNECTION,
+                header::HeaderValue::from_static("close"),
+            );
+        }
+        response
     }
 }
 
@@ -249,13 +317,72 @@ async fn root() -> Json<RootResponse> {
     })
 }
 
+/// Reject a request whose text count exceeds the configured batch cap.
+fn check_batch_len(len: usize, cap: usize, what: &str) -> Result<(), ApiError> {
+    if len <= cap {
+        return Ok(());
+    }
+    Err(ApiError::too_large(format!(
+        "{what} of {len} exceeds the server limit of {cap}; split the request into smaller batches"
+    )))
+}
+
+/// Acquire one in-flight slot, or reject with `429` when the server is at
+/// capacity. Implemented as a *parts* extractor so it runs before the `Json`
+/// body extractor: requests rejected at capacity cost no body read or parse,
+/// and the worker threads stay free to serve other requests (vqtrs-76mr).
+struct InFlight(tokio::sync::OwnedSemaphorePermit);
+
+impl FromRequestParts<AppState> for InFlight {
+    type Rejection = ApiError;
+
+    async fn from_request_parts(
+        _parts: &mut axum::http::request::Parts,
+        state: &AppState,
+    ) -> Result<Self, Self::Rejection> {
+        acquire_permit(state).map(Self)
+    }
+}
+
+/// Acquire one in-flight slot, or reject with `429` when the server is at
+/// capacity. The permit is held for the duration of the inference call.
+fn acquire_permit(state: &AppState) -> Result<tokio::sync::OwnedSemaphorePermit, ApiError> {
+    state.inflight.clone().try_acquire_owned().map_err(|_| {
+        ApiError::at_capacity(format!(
+            "inference at capacity ({}/{} tasks in flight); retry shortly",
+            state.max_inflight, state.max_inflight
+        ))
+    })
+}
+
 #[derive(Serialize)]
 struct HealthResponse {
     status: &'static str,
+    in_flight: usize,
+    max_in_flight: usize,
 }
 
-async fn health() -> Json<HealthResponse> {
-    Json(HealthResponse { status: "ok" })
+/// Liveness + capacity. Answers `200` while the inference path can accept
+/// work, `503` + `Retry-After` when every in-flight slot is taken, so an
+/// external prober can tell a saturated server from a healthy one.
+async fn health(State(state): State<AppState>) -> Response {
+    let available = state.inflight.available_permits();
+    let saturated = available == 0;
+    let response = Json(HealthResponse {
+        status: if saturated { "saturated" } else { "ok" },
+        in_flight: state.max_inflight - available,
+        max_in_flight: state.max_inflight,
+    });
+    let status = if saturated {
+        StatusCode::SERVICE_UNAVAILABLE
+    } else {
+        StatusCode::OK
+    };
+    let mut http = (status, response).into_response();
+    if saturated && let Ok(value) = header::HeaderValue::from_str(&RETRY_AFTER_SECS.to_string()) {
+        http.headers_mut().insert(header::RETRY_AFTER, value);
+    }
+    http
 }
 
 #[derive(Serialize)]
@@ -356,9 +483,11 @@ struct Usage {
 
 async fn embeddings(
     State(state): State<AppState>,
+    InFlight(permit): InFlight,
     Json(req): Json<EmbedRequest>,
 ) -> Result<Json<EmbedResponse>, ApiError> {
     let texts = req.input.into_texts();
+    check_batch_len(texts.len(), state.max_batch_texts, "input batch")?;
     let approx_tokens: usize = texts.iter().map(|t| t.len().div_ceil(4)).sum();
 
     let (model, vectors, tokens) = tokio::task::spawn_blocking(move || -> Result<_> {
@@ -372,6 +501,7 @@ async fn embeddings(
     })
     .await
     .map_err(|e| join_error(&e))??;
+    drop(permit);
 
     let prompt_tokens = tokens.unwrap_or(approx_tokens);
     let data = vectors
@@ -411,9 +541,11 @@ struct SparseResponse {
 
 async fn sparse_embeddings(
     State(state): State<AppState>,
+    InFlight(permit): InFlight,
     Json(req): Json<EmbedRequest>,
 ) -> Result<Json<SparseResponse>, ApiError> {
     let texts = req.input.into_texts();
+    check_batch_len(texts.len(), state.max_batch_texts, "input batch")?;
     let (model, vectors) = tokio::task::spawn_blocking(move || -> Result<_> {
         let name = pick(req.model.as_deref(), &state.default_sparse);
         let engine = state
@@ -424,6 +556,7 @@ async fn sparse_embeddings(
     })
     .await
     .map_err(|e| join_error(&e))??;
+    drop(permit);
 
     let data = vectors
         .into_iter()
@@ -464,9 +597,11 @@ struct M3Response {
 
 async fn m3_embeddings(
     State(state): State<AppState>,
+    InFlight(permit): InFlight,
     Json(req): Json<EmbedRequest>,
 ) -> Result<Json<M3Response>, ApiError> {
     let texts = req.input.into_texts();
+    check_batch_len(texts.len(), state.max_batch_texts, "input batch")?;
     let (model, vectors) = tokio::task::spawn_blocking(move || -> Result<_> {
         let name = pick(req.model.as_deref(), &state.default_m3);
         let engine = state
@@ -477,6 +612,7 @@ async fn m3_embeddings(
     })
     .await
     .map_err(|e| join_error(&e))??;
+    drop(permit);
 
     let data = vectors
         .into_iter()
@@ -531,8 +667,10 @@ struct RerankDoc {
 
 async fn rerank(
     State(state): State<AppState>,
+    InFlight(permit): InFlight,
     Json(req): Json<RerankRequest>,
 ) -> Result<Json<RerankResponse>, ApiError> {
+    check_batch_len(req.documents.len(), state.max_batch_texts, "document batch")?;
     let ranked = tokio::task::spawn_blocking(move || -> Result<_> {
         let name = pick(req.model.as_deref(), &state.default_rerank);
         let reranker = state
@@ -544,6 +682,7 @@ async fn rerank(
     })
     .await
     .map_err(|e| join_error(&e))??;
+    drop(permit);
 
     let (model, ranked) = ranked;
     let results = ranked
@@ -560,8 +699,8 @@ async fn rerank(
 
 /// Map a `spawn_blocking` join failure into an API error.
 fn join_error(err: &tokio::task::JoinError) -> ApiError {
-    ApiError {
-        status: StatusCode::INTERNAL_SERVER_ERROR,
-        message: format!("inference task failed: {err}"),
-    }
+    ApiError::new(
+        StatusCode::INTERNAL_SERVER_ERROR,
+        format!("inference task failed: {err}"),
+    )
 }
