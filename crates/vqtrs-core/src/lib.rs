@@ -27,6 +27,8 @@ mod accel;
 mod cache;
 mod catalog;
 mod embed;
+#[cfg(feature = "embeddinggemma2")]
+mod embedding_gemma2;
 mod error;
 mod rerank;
 mod sparse;
@@ -36,6 +38,10 @@ pub use catalog::{
     sparse_models,
 };
 pub use embed::Engine;
+#[cfg(feature = "embeddinggemma2")]
+pub use embedding_gemma2::{
+    EMBEDDING_GEMMA2_DIMENSIONS, EMBEDDING_GEMMA2_REPO, EmbeddingGemma2, TextForward,
+};
 pub use error::{Result, VqtrsError};
 pub use rerank::{Ranked, Reranker};
 pub use sparse::{DenseSparse, M3Engine, SparseEngine, SparseVector};

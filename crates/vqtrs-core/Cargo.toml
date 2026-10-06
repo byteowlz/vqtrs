@@ -28,13 +28,37 @@ directml = ["dep:ort", "ort/directml"]
 qwen3-cuda = ["qwen3", "fastembed/cuda"]
 qwen3-metal = ["qwen3", "fastembed/metal"]
 
+# EmbeddingGemma 2 (text + image + audio) via vqtrs' own candle backend.
+embeddinggemma2 = [
+  "dep:candle-core",
+  "dep:candle-nn",
+  "dep:hf-hub",
+  "dep:serde",
+  "dep:serde_json",
+]
+
 [dependencies]
 fastembed.workspace = true
 tokenizers.workspace = true
 candle-core = { workspace = true, optional = true }
+candle-nn = { workspace = true, optional = true }
+hf-hub = { workspace = true, optional = true }
+serde = { workspace = true, optional = true }
+serde_json = { workspace = true, optional = true }
 # Direct ort handle for constructing execution providers; pinned to fastembed's
 # ort. Activated only by the ONNX accel features above.
 ort = { version = "=2.0.0-rc.12", default-features = false, optional = true }
 thiserror.workspace = true
 anyhow.workspace = true
 dirs.workspace = true
+
+# On macOS the PyTorch reference runs its GEMMs through Accelerate's sgemm;
+# routing candle's matmul through the same library is what makes the
+# EmbeddingGemma 2 backend bit-identical for every matrix shape.
+[target.'cfg(target_os = "macos")'.dependencies]
+candle-core = { workspace = true, optional = true, features = ["accelerate"] }
+candle-nn = { workspace = true, optional = true, features = ["accelerate"] }
+
+[[example]]
+name = "eg2_parity"
+required-features = ["embeddinggemma2"]

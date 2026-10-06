@@ -47,4 +47,9 @@ doc-valid-idents = [
     "TensorRT", # NVIDIA inference runtime
     "CoreML",   # Apple ML runtime
     "DirectML", # Windows GPU ML runtime
+    "EmbeddingGemma", # Google embedding model family
+    "PyTorch",  # Reference ML framework
+    "RoPE",     # Rotary position embedding
+    "AdvSIMD",  # Arm NEON instruction set
+    "NaN",      # IEEE not-a-number
 ]
