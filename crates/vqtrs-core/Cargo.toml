@@ -33,6 +33,7 @@ embeddinggemma2 = [
   "dep:candle-core",
   "dep:candle-nn",
   "dep:hf-hub",
+  "dep:image",
   "dep:serde",
   "dep:serde_json",
 ]
@@ -43,6 +44,7 @@ tokenizers.workspace = true
 candle-core = { workspace = true, optional = true }
 candle-nn = { workspace = true, optional = true }
 hf-hub = { workspace = true, optional = true }
+image = { workspace = true, optional = true }
 serde = { workspace = true, optional = true }
 serde_json = { workspace = true, optional = true }
 # Direct ort handle for constructing execution providers; pinned to fastembed's

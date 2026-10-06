@@ -59,7 +59,10 @@ def load_media(case: dict, base: pathlib.Path):
 
     kind = case["modality"]
     if kind == "image":
-        return Image.open(base / case["path"]).convert("RGB")
+        # Raw PIL image: the processor's own RGB conversion is part of the reference.
+        image = Image.open(base / case["path"])
+        image.load()
+        return image
     if kind == "audio":
         import soundfile as sf
 

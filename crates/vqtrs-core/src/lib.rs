@@ -40,7 +40,7 @@ pub use catalog::{
 pub use embed::Engine;
 #[cfg(feature = "embeddinggemma2")]
 pub use embedding_gemma2::{
-    EMBEDDING_GEMMA2_DIMENSIONS, EMBEDDING_GEMMA2_REPO, EmbeddingGemma2, TextForward,
+    EMBEDDING_GEMMA2_DIMENSIONS, EMBEDDING_GEMMA2_REPO, EmbeddingGemma2, Forward, Gemma2Input,
 };
 pub use error::{Result, VqtrsError};
 pub use rerank::{Ranked, Reranker};

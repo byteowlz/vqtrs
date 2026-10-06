@@ -15,7 +15,7 @@ use std::process::ExitCode;
 
 use anyhow::{Context, Result, bail};
 use serde_json::Value;
-use vqtrs_core::EmbeddingGemma2;
+use vqtrs_core::{EmbeddingGemma2, Gemma2Input};
 
 /// Element-wise comparison of two `f32` buffers.
 struct Diff {
@@ -129,70 +129,130 @@ fn parse_args() -> Result<Args> {
     })
 }
 
-/// Returns whether the case's token ids matched exactly.
-fn check_text_case(model: &EmbeddingGemma2, dir: &Path, case: &Value, text: &str) -> Result<bool> {
+/// Tally of compared tensors.
+#[derive(Default)]
+struct Tally {
+    compared: usize,
+    differing: usize,
+}
+
+impl Tally {
+    fn record(&mut self, label: &str, diff: &Diff, show: bool) {
+        self.compared += 1;
+        if !diff.bit_identical() {
+            self.differing += 1;
+        }
+        if show || !diff.bit_identical() {
+            let tag = if diff.bit_identical() {
+                "  BIT-IDENTICAL"
+            } else {
+                ""
+            };
+            println!("  {label:20}{}{tag}", diff.line());
+        }
+    }
+
+    fn exact(&mut self, label: &str, same: bool) {
+        self.compared += 1;
+        if !same {
+            self.differing += 1;
+        }
+        println!("  {label:20}{}", if same { "IDENTICAL" } else { "DIFFER" });
+    }
+}
+
+fn check_case(
+    model: &EmbeddingGemma2,
+    dir: &Path,
+    case: &Value,
+    input: &Value,
+    base: &Path,
+    tally: &mut Tally,
+) -> Result<()> {
     let name = case["name"].as_str().unwrap_or("?");
-    let tensors = &case["tensors"];
-    let prompt = case["prompt"].as_str().unwrap_or("");
-    let ids = model.tokenize(&format!("{prompt}{text}"))?;
-    let ref_ids: Vec<u32> = read_i64(dir, &tensors["input.input_ids"])?
+    let t = &case["tensors"];
+    let bytes;
+    let text;
+    let input = match case["modality"].as_str() {
+        Some("text") => {
+            text = format!(
+                "{}{}",
+                case["prompt"].as_str().unwrap_or(""),
+                input["text"].as_str().context("no text")?
+            );
+            Gemma2Input::Text(&text)
+        }
+        Some("image") => {
+            bytes = std::fs::read(base.join(input["path"].as_str().context("no path")?))?;
+            Gemma2Input::Image(&bytes)
+        }
+        other => bail!("unsupported modality {other:?}"),
+    };
+    let out = model.forward(input, true)?;
+    println!("{name}: seq={}", out.input_ids.len());
+
+    let ref_ids: Vec<u32> = read_i64(dir, &t["input.input_ids"])?
         .into_iter()
         .map(|v| v as u32)
         .collect();
-    let ids_ok = ids == ref_ids;
-    println!(
-        "{name}: seq={} token ids {}",
-        ids.len(),
-        if ids_ok { "IDENTICAL" } else { "DIFFER" }
-    );
-    if !ids_ok {
-        return Ok(false);
+    tally.exact("token ids", out.input_ids == ref_ids);
+    if out.input_ids != ref_ids {
+        return Ok(());
     }
-
-    let out = model.forward_text_ids(&ids, true)?;
-    let ref_hidden = read_f32(dir, &tensors["hf.hidden_states"])?;
-    let per_layer = out.seq * 512;
+    if !t["input.pixel_values"].is_null() {
+        tally.record(
+            "pixel values",
+            &Diff::of(&out.pixel_values, &read_f32(dir, &t["input.pixel_values"])?)?,
+            true,
+        );
+        let ref_pos = read_i64(dir, &t["input.image_position_ids"])?;
+        let ours: Vec<i64> = out.image_positions.iter().flatten().copied().collect();
+        tally.exact("patch positions", ours == ref_pos);
+        tally.record(
+            "image soft tokens",
+            &Diff::of(
+                &out.image_features,
+                &read_f32(dir, &t["hf.image_features"])?,
+            )?,
+            true,
+        );
+    }
+    let ref_hidden = read_f32(dir, &t["hf.hidden_states"])?;
+    let per_layer = out.input_ids.len() * 512;
+    let all = std::env::var_os("EG2_ALL_LAYERS").is_some();
     for (i, (ours, theirs)) in out
         .hidden_states
         .chunks(per_layer)
         .zip(ref_hidden.chunks(per_layer))
         .enumerate()
     {
-        if std::env::var_os("EG2_ALL_LAYERS").is_some() || i < 3 || i % 6 == 0 || i == 23 {
-            let label = if i == 0 {
-                "input embeds".to_owned()
-            } else {
-                format!("after layer {:>2}", i - 1)
-            };
-            println!("  {label:18}  {}", Diff::of(ours, theirs)?.line());
-        }
+        let label = if i == 0 {
+            "input embeds".to_owned()
+        } else {
+            format!("after layer {:>2}", i - 1)
+        };
+        tally.record(&label, &Diff::of(ours, theirs)?, all || i == 0);
     }
-    let tokens = Diff::of(
-        &out.token_embeddings,
-        &read_f32(dir, &tensors["hf.token_embeddings"])?,
-    )?;
-    println!("  token embeddings    {}", tokens.line());
-    let vs_hf = Diff::of(&out.embedding, &read_f32(dir, &tensors["hf.embedding"])?)?;
-    let vs_st = Diff::of(&out.embedding, &read_f32(dir, &tensors["st.embedding"])?)?;
-    println!(
-        "  embedding vs hf     {}{}",
-        vs_hf.line(),
-        if vs_hf.bit_identical() {
-            "  BIT-IDENTICAL"
-        } else {
-            ""
-        }
+    tally.record(
+        "token embeddings",
+        &Diff::of(
+            &out.token_embeddings,
+            &read_f32(dir, &t["hf.token_embeddings"])?,
+        )?,
+        true,
     );
-    println!(
-        "  embedding vs st     {}{}",
-        vs_st.line(),
-        if vs_st.bit_identical() {
-            "  BIT-IDENTICAL"
-        } else {
-            ""
-        }
+    tally.record(
+        "embedding vs hf",
+        &Diff::of(&out.embedding, &read_f32(dir, &t["hf.embedding"])?)?,
+        true,
     );
-    Ok(true)
+    let vs_st = Diff::of(&out.embedding, &read_f32(dir, &t["st.embedding"])?)?;
+    println!(
+        "  {:20}{}  (sdpa attention; informational)",
+        "embedding vs st",
+        vs_st.line()
+    );
+    Ok(())
 }
 
 fn run() -> Result<bool> {
@@ -203,35 +263,38 @@ fn run() -> Result<bool> {
         .cases
         .unwrap_or_else(|| PathBuf::from("scripts/parity/eg2_cases_text.json"));
     let cases: Value = serde_json::from_slice(&std::fs::read(&cases_file)?)?;
+    let base = cases_file
+        .parent()
+        .map_or_else(|| PathBuf::from("."), Path::to_path_buf);
     println!("reference versions: {}", manifest["versions"]);
 
     let model = match &args.model_dir {
         Some(dir) => EmbeddingGemma2::from_dir(dir)?,
         None => EmbeddingGemma2::from_hf(vqtrs_core::EMBEDDING_GEMMA2_REPO)?,
     };
-    let mut all_ids_ok = true;
+    let mut tally = Tally::default();
     for case in manifest["cases"]
         .as_array()
         .context("manifest without cases")?
     {
-        if case["modality"] != "text" {
-            continue;
-        }
         let input = cases
             .as_array()
             .and_then(|c| c.iter().find(|c| c["name"] == case["name"]))
             .context("case missing from the cases file")?;
-        let text = input["text"].as_str().context("text case without text")?;
-        all_ids_ok &= check_text_case(&model, &args.reference, case, text)?;
+        check_case(&model, &args.reference, case, input, &base, &mut tally)?;
     }
-    Ok(all_ids_ok)
+    println!(
+        "compared {} tensors, {} not bit-identical",
+        tally.compared, tally.differing
+    );
+    Ok(tally.differing == 0)
 }
 
 fn main() -> ExitCode {
     match run() {
         Ok(true) => ExitCode::SUCCESS,
         Ok(false) => {
-            eprintln!("token ids differ from the reference");
+            eprintln!("outputs are not bit-identical to the reference");
             ExitCode::FAILURE
         }
         Err(err) => {

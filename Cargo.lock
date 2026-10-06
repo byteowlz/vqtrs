@@ -3980,6 +3980,7 @@ dependencies = [
  "dirs",
  "fastembed",
  "hf-hub",
+ "image",
  "ort",
  "serde",
  "serde_json",

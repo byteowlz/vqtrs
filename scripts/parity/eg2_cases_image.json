@@ -1,0 +1,37 @@
+[
+  {
+    "name": "i_alpha_500x400",
+    "modality": "image",
+    "path": "media/alpha_500x400.png"
+  },
+  {
+    "name": "i_exact_912x672",
+    "modality": "image",
+    "path": "media/exact_912x672.png"
+  },
+  {
+    "name": "i_gray_300x300",
+    "modality": "image",
+    "path": "media/gray_300x300.png"
+  },
+  {
+    "name": "i_photo_1037x761",
+    "modality": "image",
+    "path": "media/photo_1037x761.png"
+  },
+  {
+    "name": "i_portrait_816x1224",
+    "modality": "image",
+    "path": "media/portrait_816x1224.jpg"
+  },
+  {
+    "name": "i_small_64x48",
+    "modality": "image",
+    "path": "media/small_64x48.png"
+  },
+  {
+    "name": "i_wide_1920x90",
+    "modality": "image",
+    "path": "media/wide_1920x90.png"
+  }
+]

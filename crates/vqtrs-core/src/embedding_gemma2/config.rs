@@ -39,6 +39,7 @@ pub struct TextConfig {
     pub layer_types: Vec<LayerType>,
     pub hidden_size_per_layer_input: usize,
     pub embedding_dim: usize,
+    pub pad_token_id: u32,
     pub rope_parameters: HashMap<String, RopeParams>,
     /// Per-layer overrides, keyed by zero-padded layer index (`"05"`).
     #[serde(default)]
@@ -89,5 +90,11 @@ impl TextConfig {
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct Config {
-    pub text_config: TextConfig,
+    #[serde(rename = "text_config")]
+    pub text: TextConfig,
+    #[serde(default, rename = "vision_config")]
+    pub vision: Option<super::vision::VisionConfig>,
+    pub image_token_id: u32,
+    pub boi_token_id: u32,
+    pub eoi_token_id: u32,
 }

@@ -58,6 +58,8 @@ candle-nn = "0.11"
 # Hugging Face hub downloads for the EmbeddingGemma 2 backend; the same version
 # and TLS stack fastembed already uses, so the feature adds no new crates.
 hf-hub = { version = "0.5", default-features = false, features = ["ureq", "rustls-tls"] }
+# Image decoding for the EmbeddingGemma 2 backend (same version fastembed locks).
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp"] }
 # Tokenizer for accurate token counts; matched to fastembed's pin so it unifies.
 tokenizers = { version = "0.22.2", default-features = false, features = ["onig"] }
 
