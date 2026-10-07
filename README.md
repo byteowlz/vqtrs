@@ -33,7 +33,8 @@ just install-all      # interactive: detects host, picks GPU + Qwen3
 just install-cuda     # NVIDIA: ONNX + Qwen3 on GPU (CUDA <= 13.2)
 just install-cuda13   # NVIDIA: same, for CUDA 13.3+
 just install-mac      # Apple Silicon: ONNX CoreML + Qwen3 Metal
-just install-eg2      # CPU EmbeddingGemma 2: text, images, 16 kHz WAV
+just install-mac-eg2  # CoreML + Qwen3 Metal + multimodal EmbeddingGemma Metal
+just install-eg2      # CPU EmbeddingGemma 2: text, images, 16 kHz WAV, video
 ```
 
 ### CLI

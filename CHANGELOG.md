@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+## [0.2.0] - 2026-10-07
+
 ### Added
 
 - **core: optional EmbeddingGemma 2 text, image and audio backend (vqtrs-3jhq).**
@@ -30,8 +32,16 @@ All notable changes to this project will be documented in this file.
   frames, tokens, intermediate states and normalized output. See
   `docs/embeddinggemma2-video.md` for codec/platform and resource limits.
 
+- Standard MIT `LICENSE` for vqtrs; upstream port/model licenses remain separate.
+- `just install-mac-eg2` preserves CoreML/Qwen3 Metal while enabling the
+  EmbeddingGemma 2 multimodal Metal backend in both binaries. Default builds
+  and release archives remain ONNX-only; GPU/media support is opt-in.
+
 ### Fixed
 
+- ONNX provider construction is strict-Clippy clean with acceleration enabled,
+  including the combined CoreML/Qwen3 Metal/EmbeddingGemma Metal build;
+  provider order and CPU fallback are unchanged.
 - **api: the server no longer stops answering under concurrent or large embedding
   batches (vqtrs-76mr).** Inference tasks handed to `spawn_blocking` were
   unbounded, so a burst of requests queued on the engine mutex until tokio's

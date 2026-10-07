@@ -20,7 +20,7 @@ install-qwen3:
     cargo install --path crates/vqtrs-cli --features qwen3 --force
     cargo install --path crates/vqtrs-api --features qwen3 --force
 
-# Install the CPU EmbeddingGemma 2 text/image/audio backend in both binaries
+# Install the CPU EmbeddingGemma 2 text/image/audio/video backend in both binaries
 install-eg2:
     cargo install --path crates/vqtrs-cli --features embeddinggemma2 --force
     cargo install --path crates/vqtrs-api --features embeddinggemma2 --force
@@ -39,6 +39,11 @@ install-cuda13:
 install-mac:
     cargo install --path crates/vqtrs-cli --features coreml,qwen3-metal --force
     cargo install --path crates/vqtrs-api --features coreml,qwen3-metal --force
+
+# Apple Silicon: preserve CoreML/Qwen3 Metal and add multimodal EmbeddingGemma Metal
+install-mac-eg2:
+    cargo install --path crates/vqtrs-cli --locked --features coreml,qwen3-metal,embeddinggemma2-metal --force
+    cargo install --path crates/vqtrs-api --locked --features coreml,qwen3-metal,embeddinggemma2-metal --force
 
 # Uninstall all binaries
 uninstall:

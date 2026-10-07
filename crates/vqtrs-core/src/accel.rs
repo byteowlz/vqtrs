@@ -31,16 +31,16 @@ pub const fn execution_providers() -> Vec<ExecutionProviderDispatch> {
 ))]
 #[must_use]
 pub fn execution_providers() -> Vec<ExecutionProviderDispatch> {
-    let mut providers: Vec<ExecutionProviderDispatch> = Vec::new();
-    #[cfg(feature = "cuda")]
-    providers.push(ort::execution_providers::CUDAExecutionProvider::default().build());
-    #[cfg(feature = "tensorrt")]
-    providers.push(ort::execution_providers::TensorRTExecutionProvider::default().build());
-    #[cfg(feature = "coreml")]
-    providers.push(ort::execution_providers::CoreMLExecutionProvider::default().build());
-    #[cfg(feature = "directml")]
-    providers.push(ort::execution_providers::DirectMLExecutionProvider::default().build());
-    providers
+    Vec::from([
+        #[cfg(feature = "cuda")]
+        ort::execution_providers::CUDAExecutionProvider::default().build(),
+        #[cfg(feature = "tensorrt")]
+        ort::execution_providers::TensorRTExecutionProvider::default().build(),
+        #[cfg(feature = "coreml")]
+        ort::execution_providers::CoreMLExecutionProvider::default().build(),
+        #[cfg(feature = "directml")]
+        ort::execution_providers::DirectMLExecutionProvider::default().build(),
+    ])
 }
 
 /// Candle device and dtype for the Qwen3 backend. Plain CPU/F32 when no
