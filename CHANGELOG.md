@@ -4,6 +4,20 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+### Added
+
+- **core: optional EmbeddingGemma 2 text, image and audio backend (vqtrs-3jhq).**
+  Direct `EmbeddingGemma2` / `Gemma2Input` library API, CPU f32, 768-dimensional
+  normalized embeddings. Five audio fixtures compare 150 tensors bit-for-bit
+  against the pinned Apple Silicon Python reference, with no differences;
+  text and image parity remain covered. Includes a conformer audio tower,
+  reference-matched WAV/mel preprocessing, offline regression tests and
+  reproducible parity tooling. Catalog/Engine support, `vqtrs embed-media`
+  and a bounded `/embeddings/multimodal` HTTP/UDS route are included; live
+  integration checks also match the reference byte-for-byte. The feature stays
+  off by default. Video is not yet implemented; see
+  `docs/embeddinggemma2-parity.md` for scope and the numerical contract.
+
 ### Fixed
 
 - **api: the server no longer stops answering under concurrent or large embedding

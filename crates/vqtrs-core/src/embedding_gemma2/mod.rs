@@ -4,13 +4,18 @@
 //! sentence-transformers head (mean pooling, L2 normalisation). Neither
 //! fastembed nor candle-transformers ships this architecture.
 //!
-//! On aarch64 macOS the output is bit-identical to the PyTorch reference
-//! (eager attention, `f32`, CPU): see `ops` and `torch_cpu`.
+//! On aarch64 macOS the tested outputs are bit-identical to the PyTorch
+//! reference (`f32`, CPU; text/vision eager attention and audio boolean masks):
+//! see `ops` and `torch_cpu`. This is not a cross-platform bit-identity guarantee.
 
+mod audio;
 mod config;
 mod image;
 mod jpeg;
+mod layer_norm;
+mod mel;
 mod ops;
+mod pocketfft;
 #[cfg(test)]
 mod probe;
 mod sleef;
@@ -27,8 +32,10 @@ use tokenizers::Tokenizer;
 
 use crate::cache::model_cache_dir;
 use crate::error::{Result, VqtrsError};
+use audio::AudioModel;
 use config::Config;
 use image::ImageSettings;
+use mel::{MelFrontEnd, MelSettings};
 use ops::mean_pool_normalize;
 use text::TextModel;
 use vision::VisionModel;
@@ -39,6 +46,12 @@ pub const EMBEDDING_GEMMA2_REPO: &str = "google/embeddinggemma-2";
 /// Output width of EmbeddingGemma 2 embeddings.
 pub const EMBEDDING_GEMMA2_DIMENSIONS: usize = 768;
 
+/// Practical CPU limit for the joint sequence, including special/media tokens.
+///
+/// This backend materializes attention matrices; it does not implement the
+/// checkpoint's full 262,144-token context efficiently.
+pub const EMBEDDING_GEMMA2_MAX_TOKENS: usize = 8192;
+
 /// One input to embed.
 #[derive(Debug, Clone, Copy)]
 pub enum Gemma2Input<'a> {
@@ -46,6 +59,9 @@ pub enum Gemma2Input<'a> {
     Text(&'a str),
     /// An encoded image (PNG, JPEG, ...).
     Image(&'a [u8]),
+    /// An encoded WAV clip at 16 kHz (mono or stereo).
+    /// Clips longer than 30 seconds are truncated, as in the reference.
+    Audio(&'a [u8]),
 }
 
 /// Raw outputs of one forward pass, for diagnostics and parity checks.
@@ -59,6 +75,14 @@ pub struct Forward {
     pub image_positions: Vec<[i64; 2]>,
     /// Image soft tokens in text space `(num_soft_tokens, hidden)`.
     pub image_features: Vec<f32>,
+    /// Audio processor output `(frames, mel_bins)`, empty for other inputs.
+    pub input_features: Vec<f32>,
+    /// Audio processor's frame-validity mask.
+    pub input_features_mask: Vec<bool>,
+    /// Valid audio soft tokens in text space `(num_soft_tokens, hidden)`.
+    pub audio_features: Vec<f32>,
+    /// Subsample projection and audio layer outputs; empty unless requested.
+    pub audio_hidden_states: Vec<Vec<f32>>,
     /// Per-token embeddings, row-major `(seq, embedding_dim)`.
     pub token_embeddings: Vec<f32>,
     /// Input embeddings then every text layer output but the last,
@@ -72,6 +96,8 @@ pub struct Forward {
 pub struct EmbeddingGemma2 {
     text: TextModel,
     vision: Option<VisionModel>,
+    audio: Option<AudioModel>,
+    mel: MelFrontEnd,
     image_settings: ImageSettings,
     tokenizer: Tokenizer,
     cfg: Config,
@@ -156,9 +182,18 @@ impl EmbeddingGemma2 {
             .map(|vc| VisionModel::load(&vb, vc, cfg.text.hidden_size))
             .transpose()
             .map_err(backend)?;
+        let audio = cfg
+            .audio
+            .as_ref()
+            .map(|ac| AudioModel::load(&vb, ac, cfg.text.hidden_size))
+            .transpose()
+            .map_err(backend)?;
+        let mel = MelFrontEnd::new(MelSettings::default(), &device).map_err(backend)?;
         Ok(Self {
             text,
             vision,
+            audio,
+            mel,
             image_settings,
             tokenizer,
             cfg,
@@ -206,7 +241,69 @@ impl EmbeddingGemma2 {
                 self.forward_sequence(&ids, None, keep_hidden_states, Forward::default())
             }
             Gemma2Input::Image(bytes) => self.forward_image(bytes, keep_hidden_states),
+            Gemma2Input::Audio(bytes) => self.forward_audio(bytes, keep_hidden_states),
         }
+    }
+
+    fn forward_audio(&self, bytes: &[u8], keep_hidden_states: bool) -> Result<Forward> {
+        let audio = self
+            .audio
+            .as_ref()
+            .ok_or_else(|| VqtrsError::Backend("checkpoint has no audio tower".into()))?;
+        let (wave, rate) = mel::decode_wav(bytes).map_err(VqtrsError::Backend)?;
+        let settings = self.mel.settings();
+        if rate != settings.sampling_rate {
+            return Err(VqtrsError::Backend(format!(
+                "expected {} Hz WAV, got {rate} Hz; resample before embedding",
+                settings.sampling_rate
+            )));
+        }
+        let mel = self.mel.features(&wave).map_err(backend)?;
+        if mel.mask.iter().all(|&valid| !valid) {
+            return Err(VqtrsError::Backend(
+                "audio clip is too short to produce a valid frame".into(),
+            ));
+        }
+        let input = Tensor::from_slice(
+            &mel.features,
+            (mel.mask.len(), settings.feature_size),
+            &self.device,
+        )
+        .map_err(backend)?;
+        let mut hidden = keep_hidden_states.then(Vec::new);
+        let features = audio
+            .forward(&input, &mel.mask, hidden.as_mut())
+            .map_err(backend)?;
+        let token = |id: u32| self.tokenizer.id_to_token(id).unwrap_or_default();
+        let prompt = format!(
+            "{}{}{}",
+            token(self.cfg.boa_token_id),
+            token(self.cfg.audio_token_id).repeat(features.dim(0).map_err(backend)?),
+            token(self.cfg.eoa_token_id)
+        );
+        let ids = self.tokenize(&prompt)?;
+        let flatten = |t: &Tensor| {
+            t.flatten_all()
+                .and_then(|t| t.to_vec1::<f32>())
+                .map_err(backend)
+        };
+        let out = Forward {
+            input_features: mel.features,
+            input_features_mask: mel.mask,
+            audio_features: flatten(&features)?,
+            audio_hidden_states: hidden
+                .unwrap_or_default()
+                .iter()
+                .map(flatten)
+                .collect::<Result<_>>()?,
+            ..Forward::default()
+        };
+        self.forward_sequence(
+            &ids,
+            Some((&features, self.cfg.audio_token_id)),
+            keep_hidden_states,
+            out,
+        )
     }
 
     fn forward_image(&self, bytes: &[u8], keep_hidden_states: bool) -> Result<Forward> {
@@ -261,6 +358,7 @@ impl EmbeddingGemma2 {
         keep_hidden_states: bool,
         mut out: Forward,
     ) -> Result<Forward> {
+        check_sequence_length(ids.len())?;
         let run = || -> candle_core::Result<Forward> {
             let pad = self.cfg.text.pad_token_id;
             let placeholder = soft.map(|(_, id)| id);
@@ -278,6 +376,11 @@ impl EmbeddingGemma2 {
             let tokens = self.text.forward(&embeds, hidden.as_mut())?;
             out.input_ids = ids.to_vec();
             out.embedding = mean_pool_normalize(&tokens)?.to_vec1::<f32>()?;
+            if out.embedding.iter().any(|v| !v.is_finite()) {
+                return Err(candle_core::Error::Msg(
+                    "model produced a non-finite embedding".into(),
+                ));
+            }
             out.token_embeddings = tokens.flatten_all()?.to_vec1::<f32>()?;
             if let Some(layers) = hidden {
                 out.hidden_states = Tensor::stack(&layers, 0)?.flatten_all()?.to_vec1::<f32>()?;
@@ -286,6 +389,15 @@ impl EmbeddingGemma2 {
         };
         run().map_err(backend)
     }
+}
+
+fn check_sequence_length(count: usize) -> Result<()> {
+    if count > EMBEDDING_GEMMA2_MAX_TOKENS {
+        return Err(VqtrsError::Backend(format!(
+            "EmbeddingGemma 2 input has {count} tokens; CPU limit is {EMBEDDING_GEMMA2_MAX_TOKENS}; split the input"
+        )));
+    }
+    Ok(())
 }
 
 /// `inputs_embeds.masked_scatter(ids == id, features)`: the rows at the
@@ -338,4 +450,15 @@ fn image_settings(bytes: &[u8]) -> Result<ImageSettings> {
 
 fn backend(err: impl std::fmt::Display) -> VqtrsError {
     VqtrsError::Backend(err.to_string())
+}
+
+#[cfg(test)]
+mod limits_tests {
+    use super::*;
+
+    #[test]
+    fn rejects_sequences_above_cpu_limit() {
+        assert!(check_sequence_length(EMBEDDING_GEMMA2_MAX_TOKENS).is_ok());
+        assert!(check_sequence_length(EMBEDDING_GEMMA2_MAX_TOKENS + 1).is_err());
+    }
 }

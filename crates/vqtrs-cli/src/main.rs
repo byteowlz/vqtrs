@@ -1,6 +1,8 @@
 //! `vqtrs` — command-line embeddings and reranking over the vqtrs-core engine.
 
 mod daemon;
+#[cfg(feature = "embeddinggemma2")]
+mod media;
 mod pull;
 mod service;
 
@@ -24,6 +26,8 @@ fn main() -> Result<()> {
     let cli = Cli::parse();
     match cli.command {
         Command::Embed(args) => embed(args),
+        #[cfg(feature = "embeddinggemma2")]
+        Command::EmbedMedia(args) => media::run(&args),
         Command::Sparse(args) => sparse(args),
         Command::M3(args) => m3(args),
         Command::Rerank(args) => rerank(args),
@@ -48,6 +52,9 @@ struct Cli {
 enum Command {
     /// Embed text; reads positional args or, if none, lines from stdin
     Embed(EmbedArgs),
+    /// Embed image files or 16 kHz WAV clips with EmbeddingGemma 2
+    #[cfg(feature = "embeddinggemma2")]
+    EmbedMedia(media::MediaArgs),
     /// Sparse-embed text (SPLADE / BGE-M3 sparse)
     Sparse(SparseArgs),
     /// Joint dense+sparse embed via BGE-M3

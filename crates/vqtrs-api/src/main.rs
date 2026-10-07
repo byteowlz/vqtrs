@@ -2,6 +2,8 @@
 //! backed by vqtrs-core.
 
 mod config;
+#[cfg(feature = "embeddinggemma2")]
+mod multimodal;
 mod registry;
 
 use std::net::{IpAddr, SocketAddr};
@@ -121,7 +123,13 @@ async fn try_main() -> Result<()> {
         .route("/embeddings/sparse", post(sparse_embeddings))
         .route("/embeddings/m3", post(m3_embeddings))
         .route("/rerank", post(rerank))
-        .route("/v1/rerank", post(rerank))
+        .route("/v1/rerank", post(rerank));
+    #[cfg(feature = "embeddinggemma2")]
+    let app = app.route(
+        "/embeddings/multimodal",
+        post(multimodal::embeddings).layer(axum::extract::DefaultBodyLimit::max(16 * 1024 * 1024)),
+    );
+    let app = app
         .layer(cors)
         .layer(TraceLayer::new_for_http())
         .with_state(state);

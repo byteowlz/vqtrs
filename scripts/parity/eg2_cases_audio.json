@@ -1,0 +1,27 @@
+[
+  {
+    "name": "a_chirp_2370ms",
+    "modality": "audio",
+    "path": "media/chirp_2370ms.wav"
+  },
+  {
+    "name": "a_long_31500ms_pcm16",
+    "modality": "audio",
+    "path": "media/long_31500ms_pcm16.wav"
+  },
+  {
+    "name": "a_short_300ms",
+    "modality": "audio",
+    "path": "media/short_300ms.wav"
+  },
+  {
+    "name": "a_silence_1000ms",
+    "modality": "audio",
+    "path": "media/silence_1000ms.wav"
+  },
+  {
+    "name": "a_speech_7100ms_pcm16",
+    "modality": "audio",
+    "path": "media/speech_7100ms_pcm16.wav"
+  }
+]

@@ -49,6 +49,17 @@ pub struct Rgb {
 /// dropped (not composited), grey is replicated, 16-bit samples keep their
 /// high byte.
 pub fn decode_rgb(bytes: &[u8]) -> Result<Rgb, String> {
+    // Check headers before either decoder allocates pixel/MCU buffers. A
+    // small compressed request must not expand into an unbounded image.
+    let reader = image::ImageReader::new(std::io::Cursor::new(bytes))
+        .with_guessed_format()
+        .map_err(|e| format!("cannot identify image: {e}"))?;
+    let (width, height) = reader
+        .into_dimensions()
+        .map_err(|e| format!("cannot read image dimensions: {e}"))?;
+    if width == 0 || height == 0 || u64::from(width) * u64::from(height) > 16_777_216 {
+        return Err("image must contain between 1 and 16,777,216 pixels".into());
+    }
     // JPEG through the libjpeg-turbo-exact decoder (Pillow's decoder).
     if let Some(d) = super::jpeg::decode(bytes) {
         let data = if d.channels == 1 {
@@ -99,6 +110,33 @@ pub fn decode_rgb(bytes: &[u8]) -> Result<Rgb, String> {
         height,
         data,
     })
+}
+
+#[cfg(test)]
+mod limits_tests {
+    use image::ImageEncoder;
+
+    #[test]
+    fn rejects_large_dimensions_before_decoding_pixels() {
+        let mut png = Vec::new();
+        image::codecs::png::PngEncoder::new(&mut png)
+            .write_image(&[1, 2, 3], 1, 1, image::ExtendedColorType::Rgb8)
+            .unwrap();
+        assert_eq!(super::decode_rgb(&png).unwrap().data, [1, 2, 3]);
+        // A valid IHDR claiming 64 million pixels, with the original tiny
+        // compressed pixel stream: the allocation must be rejected first.
+        png[16..20].copy_from_slice(&8192_u32.to_be_bytes());
+        png[20..24].copy_from_slice(&8192_u32.to_be_bytes());
+        let mut crc = u32::MAX;
+        for &byte in &png[12..29] {
+            crc ^= u32::from(byte);
+            for _ in 0..8 {
+                crc = (crc >> 1) ^ if crc & 1 == 1 { 0xedb8_8320 } else { 0 };
+            }
+        }
+        png[29..33].copy_from_slice(&(!crc).to_be_bytes());
+        assert!(super::decode_rgb(&png).unwrap_err().contains("pixels"));
+    }
 }
 
 /// `get_aspect_ratio_preserving_size`: the largest `(height, width)`, both

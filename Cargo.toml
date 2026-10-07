@@ -55,6 +55,9 @@ candle-core = "0.11"
 # candle building blocks for the EmbeddingGemma 2 backend; same line as
 # candle-core. Pulled in only when the `embeddinggemma2` feature is enabled.
 candle-nn = "0.11"
+# Already used by fastembed/ort; safe beta=1 GEMM for biased audio projection.
+ndarray = "=0.17.2"
+base64 = "=0.22.1"
 # Hugging Face hub downloads for the EmbeddingGemma 2 backend; the same version
 # and TLS stack fastembed already uses, so the feature adds no new crates.
 hf-hub = { version = "0.5", default-features = false, features = ["ureq", "rustls-tls"] }

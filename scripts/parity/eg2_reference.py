@@ -3,10 +3,10 @@
 # dependencies = [
 #   "transformers==5.19.0",
 #   "sentence-transformers==6.1.0",
-#   "torch",
+#   "torch==2.14.1",
 #   "torchvision",
-#   "pillow",
-#   "numpy",
+#   "pillow==12.3.0",
+#   "numpy==2.4.6",
 #   "librosa",
 #   "soundfile",
 #   "av",
@@ -23,8 +23,9 @@ Two reference paths are recorded:
 
 * `st` -- `SentenceTransformer.encode`, the canonical public API
   (default attention implementation).
-* `hf` -- `EmbeddingGemma2Model` with `attn_implementation="eager"`, mean
-  pooling and L2 normalisation done here, plus the intermediates.
+* `hf` -- `EmbeddingGemma2Model` with eager text/vision attention and boolean
+  audio masks (`sdpa` mask configuration), mean pooling and L2 normalisation
+  done here, plus the intermediates.
 
 Everything runs in float32 on CPU, one input per forward pass (no padding).
 
@@ -43,6 +44,7 @@ import numpy as np
 import torch
 
 MODEL_ID = "google/embeddinggemma-2"
+MODEL_REVISION = "914f7f89142e33e77833254d9c9b90c3cef7303b"
 
 
 def save(out: pathlib.Path, name: str, array: np.ndarray) -> dict:
@@ -77,11 +79,39 @@ def load_media(case: dict, base: pathlib.Path):
     return None
 
 
+def attach_audio_hooks(model, out, name, entry):
+    """Capture tensor outputs of each audio module for a focused parity probe."""
+    def capture(label):
+        def hook(_module, _args, output):
+            if isinstance(output, tuple):
+                output = output[0]
+            if isinstance(output, torch.Tensor):
+                key = f"hf.audio.{label}"
+                entry["tensors"][key] = save(out, f"{name}.{key}", output.detach().numpy())
+        return hook
+    return [module.register_forward_hook(capture(label))
+            for label, module in model.audio_tower.named_modules() if label]
+
+
+def processor_inputs(processor, modality, case, prompt, media):
+    """Keep modality dispatch separate from model execution and dump writing."""
+    if modality == "text":
+        return processor(text=[prompt + case["text"]], return_tensors="pt")
+    if modality == "image":
+        return processor(images=[[media]], return_tensors="pt")
+    if modality == "audio":
+        return processor(audio=[media], return_tensors="pt")
+    if modality == "video":
+        return processor(videos=[media], return_tensors="pt")
+    raise ValueError(f"unknown modality {modality}")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--cases", required=True)
     parser.add_argument("--out", required=True)
     parser.add_argument("--threads", type=int, default=1)
+    parser.add_argument("--audio-trace", action="store_true", help="Capture audio module outputs for a focused case")
     args = parser.parse_args()
 
     torch.set_num_threads(args.threads)
@@ -97,16 +127,26 @@ def main() -> None:
     out = pathlib.Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
 
-    processor = AutoProcessor.from_pretrained(MODEL_ID)
+    processor = AutoProcessor.from_pretrained(MODEL_ID, revision=MODEL_REVISION)
+    # Eager attention defines the text and vision numerics. The audio tower
+    # always computes its chunked attention explicitly and only consumes the
+    # mask; under "eager", transformers 5.19 hands it a float additive mask
+    # that `masked_fill(mask.logical_not(), ...)` inverts (a bug), so audio
+    # gets the boolean mask the "sdpa" setting produces -- the semantics
+    # SentenceTransformer.encode runs with.
     hf_model = AutoModel.from_pretrained(
-        MODEL_ID, dtype=torch.float32, attn_implementation="eager"
+        MODEL_ID,
+        dtype=torch.float32,
+        revision=MODEL_REVISION,
+        attn_implementation={"text_config": "eager", "vision_config": "eager", "audio_config": "sdpa"},
     ).eval()
     st_model = SentenceTransformer(
-        MODEL_ID, device="cpu", model_kwargs={"dtype": torch.float32}
+        MODEL_ID, device="cpu", revision=MODEL_REVISION, model_kwargs={"dtype": torch.float32}
     )
 
     manifest = {
         "model": MODEL_ID,
+        "revision": MODEL_REVISION,
         "versions": {
             "transformers": transformers.__version__,
             "sentence_transformers": sentence_transformers.__version__,
@@ -123,22 +163,16 @@ def main() -> None:
         entry = {"name": name, "modality": modality, "prompt": prompt, "tensors": {}}
 
         # --- processor inputs (shared by both paths) ---
-        if modality == "text":
-            inputs = processor(text=[prompt + case["text"]], return_tensors="pt")
-        elif modality == "image":
-            inputs = processor(images=[[media]], return_tensors="pt")
-        elif modality == "audio":
-            inputs = processor(audio=[media], return_tensors="pt")
-        elif modality == "video":
-            inputs = processor(videos=[media], return_tensors="pt")
-        else:
-            raise ValueError(f"unknown modality {modality}")
+        inputs = processor_inputs(processor, modality, case, prompt, media)
 
         for key, value in inputs.items():
             if isinstance(value, torch.Tensor):
                 entry["tensors"][f"input.{key}"] = save(out, f"{name}.input.{key}", value.numpy())
 
         # --- hf path: eager attention, intermediates captured ---
+        hooks = []
+        if args.audio_trace and modality == "audio":
+            hooks = attach_audio_hooks(hf_model, out, name, entry)
         with torch.no_grad():
             model_inputs = {
                 k: v for k, v in inputs.items() if k not in processor.unused_input_names
@@ -148,6 +182,9 @@ def main() -> None:
             mask = inputs["attention_mask"][0].to(tokens.dtype)
             pooled = (tokens * mask[:, None]).sum(0) / mask.sum()
             embedding = torch.nn.functional.normalize(pooled, p=2, dim=0)
+
+        for hook in hooks:
+            hook.remove()
 
         entry["tensors"]["hf.token_embeddings"] = save(out, f"{name}.hf.token_embeddings", tokens.numpy())
         entry["tensors"]["hf.embedding"] = save(out, f"{name}.hf.embedding", embedding.numpy())

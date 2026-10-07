@@ -20,6 +20,11 @@ install-qwen3:
     cargo install --path crates/vqtrs-cli --features qwen3 --force
     cargo install --path crates/vqtrs-api --features qwen3 --force
 
+# Install the CPU EmbeddingGemma 2 text/image/audio backend in both binaries
+install-eg2:
+    cargo install --path crates/vqtrs-cli --features embeddinggemma2 --force
+    cargo install --path crates/vqtrs-api --features embeddinggemma2 --force
+
 # Install for NVIDIA: ONNX + Qwen3 both on GPU (native; CUDA toolkit <= 13.2)
 install-cuda:
     cargo install --path crates/vqtrs-cli --features cuda,qwen3-cuda --force
@@ -93,6 +98,25 @@ test-v:
 # Run a specific test
 test-one TEST:
     cargo test --workspace {{TEST}}
+
+# EmbeddingGemma 2 optional backend: compile, lint all targets, and offline tests
+check-eg2:
+    cargo fmt --all -- --check
+    cargo check --workspace --features vqtrs-api/embeddinggemma2,vqtrs-cli/embeddinggemma2
+    cargo clippy --workspace --all-targets --features vqtrs-api/embeddinggemma2,vqtrs-cli/embeddinggemma2
+    cargo test --workspace --features vqtrs-api/embeddinggemma2,vqtrs-cli/embeddinggemma2
+
+# Compare embeddings with a previously generated Python reference (needs checkpoint)
+eg2-parity REFERENCE MODEL_DIR CASES="scripts/parity/eg2_cases_text.json":
+    cargo run --release -p vqtrs-core --features embeddinggemma2 --example eg2_parity -- --reference "{{REFERENCE}}" --model-dir "{{MODEL_DIR}}" --cases "{{CASES}}"
+
+# Dump NumPy's audio front-end operation probes (no checkpoint)
+eg2-frontend-reference OUT:
+    uv run --with numpy==2.4.6 --with transformers==5.19.0 python -I scripts/parity/eg2_audio_frontend_reference.py --out "{{OUT}}"
+
+# Python reference: isolated interpreter, pinned primary numerical dependencies
+eg2-reference CASES OUT:
+    uv run --with transformers==5.19.0 --with sentence-transformers==6.1.0 --with torch==2.14.1 --with torchvision --with numpy==2.4.6 --with pillow==12.3.0 --with librosa --with soundfile --with av python -I scripts/parity/eg2_reference.py --cases "{{CASES}}" --out "{{OUT}}"
 
 # === Code Quality ===
 

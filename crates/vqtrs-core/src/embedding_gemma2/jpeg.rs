@@ -7,7 +7,8 @@
 //! `jidctint.c`, `jdsample.c` (with `jdmainct.c`'s edge-row replication),
 //! `jdcolor.c` and the range-limit table of `jdmaster.c`. libjpeg-turbo is
 //! (c) the libjpeg-turbo project and the Independent JPEG Group, under the
-//! IJG and BSD-style licenses.
+//! IJG and BSD-style licenses (see `NOTICE.md`, `jpeg.NOTICE`,
+//! `libjpeg-turbo.LICENSE.md` and `README.ijg`).
 //!
 //! Only 8-bit Huffman JPEGs with 1 (grey) or 3 (YCbCr/RGB) components are
 //! handled; anything else yields `None` so the caller can fall back.

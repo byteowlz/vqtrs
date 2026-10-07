@@ -161,6 +161,54 @@ impl Tally {
     }
 }
 
+fn check_audio(
+    out: &vqtrs_core::Forward,
+    dir: &Path,
+    tensors: &Value,
+    tally: &mut Tally,
+) -> Result<()> {
+    tally.record(
+        "audio mel features",
+        &Diff::of(
+            &out.input_features,
+            &read_f32(dir, &tensors["input.input_features"])?,
+        )?,
+        true,
+    );
+    let mask_file = tensors["input.input_features_mask"]["file"]
+        .as_str()
+        .context("mask without file")?;
+    let mask = std::fs::read(dir.join(mask_file))?;
+    tally.exact(
+        "audio frame mask",
+        out.input_features_mask == mask.iter().map(|&b| b != 0).collect::<Vec<_>>(),
+    );
+    tally.record(
+        "audio soft tokens",
+        &Diff::of(
+            &out.audio_features,
+            &read_f32(dir, &tensors["hf.audio_features"])?,
+        )?,
+        true,
+    );
+    for (i, ours) in out.audio_hidden_states.iter().enumerate() {
+        let label = if i == 0 {
+            "subsample_conv_projection".to_owned()
+        } else {
+            format!("layers.{}", i - 1)
+        };
+        let entry = &tensors[format!("hf.audio.{label}")];
+        if !entry.is_null() {
+            tally.record(
+                &format!("audio {label}"),
+                &Diff::of(ours, &read_f32(dir, entry)?)?,
+                true,
+            );
+        }
+    }
+    Ok(())
+}
+
 fn check_case(
     model: &EmbeddingGemma2,
     dir: &Path,
@@ -185,6 +233,10 @@ fn check_case(
         Some("image") => {
             bytes = std::fs::read(base.join(input["path"].as_str().context("no path")?))?;
             Gemma2Input::Image(&bytes)
+        }
+        Some("audio") => {
+            bytes = std::fs::read(base.join(input["path"].as_str().context("no path")?))?;
+            Gemma2Input::Audio(&bytes)
         }
         other => bail!("unsupported modality {other:?}"),
     };
@@ -216,6 +268,9 @@ fn check_case(
             )?,
             true,
         );
+    }
+    if !t["input.input_features"].is_null() {
+        check_audio(&out, dir, t, tally)?;
     }
     let ref_hidden = read_f32(dir, &t["hf.hidden_states"])?;
     let per_layer = out.input_ids.len() * 512;

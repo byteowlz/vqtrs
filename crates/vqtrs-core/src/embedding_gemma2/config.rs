@@ -94,6 +94,12 @@ pub struct Config {
     pub text: TextConfig,
     #[serde(default, rename = "vision_config")]
     pub vision: Option<super::vision::VisionConfig>,
+    #[serde(default, rename = "audio_config")]
+    pub audio: Option<super::audio::AudioConfig>,
+    pub audio_token_id: u32,
+    pub boa_token_id: u32,
+    #[serde(rename = "eoa_token_index")]
+    pub eoa_token_id: u32,
     pub image_token_id: u32,
     pub boi_token_id: u32,
     pub eoi_token_id: u32,

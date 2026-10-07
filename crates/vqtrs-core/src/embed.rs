@@ -1,4 +1,4 @@
-//! Dense text-embedding engine over the ONNX and Qwen3 backends.
+//! Dense embedding engine over the ONNX, Qwen3 and EmbeddingGemma 2 backends.
 
 use std::sync::{Arc, Mutex, OnceLock};
 
@@ -11,21 +11,27 @@ use crate::cache::model_cache_dir;
 #[cfg(feature = "qwen3")]
 use crate::catalog::QWEN3_MAX_LENGTH;
 use crate::catalog::{Backend, Resolved, hf_repo, resolve_dense};
+#[cfg(feature = "embeddinggemma2")]
+use crate::embedding_gemma2::{EmbeddingGemma2, Gemma2Input};
 use crate::error::{Result, VqtrsError};
 
 /// Loaded backend instance. Variants are boxed so the enum stays pointer-sized
-/// regardless of how the two backend structs differ in size.
+/// regardless of how the backend structs differ in size.
 ///
 /// fastembed's ONNX `embed` takes `&mut self`, so it is guarded by a [`Mutex`]
 /// to keep [`Engine`] inference `&self` (and therefore `Arc`-shareable). The
-/// Qwen3 backend embeds through `&self` and needs no lock.
+/// candle backends embed through `&self` and need no lock.
 enum Inner {
     Onnx(Box<Mutex<TextEmbedding>>),
     #[cfg(feature = "qwen3")]
     Qwen3(Box<Qwen3TextEmbedding>),
+    #[cfg(feature = "embeddinggemma2")]
+    EmbeddingGemma2(Box<EmbeddingGemma2>),
 }
 
-/// A loaded text-embedding model.
+/// A loaded embedding model.
+///
+/// All backends support text; EmbeddingGemma 2 also supports images and audio.
 ///
 /// Inference takes `&self`, so an `Engine` can be wrapped in an `Arc` and
 /// shared across threads. Loading downloads the model on first use and caches
@@ -91,6 +97,17 @@ impl Engine {
                     tokenizer: OnceLock::new(),
                 })
             }
+            #[cfg(feature = "embeddinggemma2")]
+            Resolved::EmbeddingGemma2 { repo, dimensions } => {
+                let inner = EmbeddingGemma2::from_hf(&repo)?;
+                Ok(Self {
+                    model: model.to_owned(),
+                    dimensions,
+                    backend: Backend::EmbeddingGemma2,
+                    inner: Inner::EmbeddingGemma2(Box::new(inner)),
+                    tokenizer: OnceLock::new(),
+                })
+            }
         }
     }
 
@@ -122,7 +139,29 @@ impl Engine {
             }
             #[cfg(feature = "qwen3")]
             Inner::Qwen3(m) => m.embed(texts).map_err(|e| backend_err(e.into())),
+            #[cfg(feature = "embeddinggemma2")]
+            Inner::EmbeddingGemma2(m) => texts.iter().map(|text| m.embed_text(text)).collect(),
         }
+    }
+
+    /// Embed text, images or audio with EmbeddingGemma 2, preserving input order.
+    ///
+    /// Each input is embedded separately. An empty batch returns no vectors,
+    /// but still requires an EmbeddingGemma 2 backend.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if this engine is not using EmbeddingGemma 2, or if
+    /// decoding, tokenization or backend inference fails.
+    #[cfg(feature = "embeddinggemma2")]
+    pub fn embed_multimodal(&self, inputs: &[Gemma2Input<'_>]) -> Result<Vec<Vec<f32>>> {
+        let Inner::EmbeddingGemma2(m) = &self.inner else {
+            return Err(VqtrsError::Backend(format!(
+                "model `{}` does not support multimodal embedding; load `google/embeddinggemma-2` to use embed_multimodal",
+                self.model
+            )));
+        };
+        inputs.iter().map(|input| m.embed(*input)).collect()
     }
 
     /// The resolved model name this engine was loaded with.

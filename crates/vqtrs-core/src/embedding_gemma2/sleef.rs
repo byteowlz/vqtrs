@@ -270,6 +270,26 @@ fn expk2f(d: F2) -> F2 {
     f2(and_not(below, t.x), and_not(below, t.y))
 }
 
+/// `xlog1pf` core for nonnegative softplus inputs (at most `exp(20)`).
+/// Uses the same double-float arithmetic as SLEEF's AdvSIMD routine.
+pub fn log1pf_positive(d: f32) -> f32 {
+    let dp1 = d + 1.0;
+    let e = ilogb2k(dp1 * (1.0_f32 / 0.75));
+    let t = ldexp3(1.0, -e);
+    let m = mla(d, t, t - 1.0);
+    let mut s = dfmul_vf2_vf(
+        f2(std::f32::consts::LN_2, -1.904_654_323_148_236_017e-09_f32),
+        e as f32,
+    );
+    let x = dfdiv(f2(m, 0.0), dfadd_vf_vf(2.0, m));
+    let x2 = x.x * x.x;
+    let t = mla(0.302_729_487_4_f32, x2, 0.399_610_817_4_f32);
+    let t = mla(t, x2, 0.666_669_488_0_f32);
+    s = dfadd_vf2_vf2(s, dfscale(x, 2.0));
+    s = dfadd_vf2_vf(s, (x2 * x.x) * t);
+    s.x + s.y
+}
+
 /// `xtanhf` = `Sleef_tanhf4_u10`.
 pub fn tanhf(x: f32) -> f32 {
     let y = x.abs();

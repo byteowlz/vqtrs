@@ -1,0 +1,3 @@
+# ripwire quality acks v1 — written by --quality-ack; a finding stays suppressed until it worsens past its acked magnitude
+# format: ack <kind> <16-hex-key> <ackNow> [cid=<16-hex-content-id>] [by=<scope that acked it>] <reason to end of line> — one per line, kept SORTED by (kind,key) on every write (merge-friendly)
+ack verbosity 4b07f7e4453c1011 130 cid=f02d12570bc4a826 by=crates/vqtrs-core/src/catalog.rs Catalog test module growth is intentional missing-feature and feature-enabled regression coverage; individual tests remain small

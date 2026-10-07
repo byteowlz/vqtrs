@@ -32,6 +32,7 @@ qwen3-metal = ["qwen3", "fastembed/metal"]
 embeddinggemma2 = [
   "dep:candle-core",
   "dep:candle-nn",
+  "dep:ndarray",
   "dep:hf-hub",
   "dep:image",
   "dep:serde",
@@ -60,6 +61,9 @@ dirs.workspace = true
 [target.'cfg(target_os = "macos")'.dependencies]
 candle-core = { workspace = true, optional = true, features = ["accelerate"] }
 candle-nn = { workspace = true, optional = true, features = ["accelerate"] }
+# candle exposes only beta=0 matmul; ndarray's safe GEMM can accumulate the
+# bias with beta=1 as PyTorch addmm does, using the same Accelerate library.
+ndarray = { workspace = true, optional = true, features = ["blas"] }
 
 [[example]]
 name = "eg2_parity"

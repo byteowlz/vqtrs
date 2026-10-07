@@ -1,10 +1,12 @@
 //! Model catalog and name resolution.
 //!
-//! Two backends are exposed behind one catalog:
+//! Three backends are exposed behind one catalog:
 //! - [`Backend::Onnx`] — fastembed/ONNX models selected via the
 //!   [`fastembed::EmbeddingModel`] enum.
 //! - [`Backend::Qwen3`] — Qwen3-Embedding models run through the candle
 //!   backend, selected by their Hugging Face repository id.
+//! - [`Backend::EmbeddingGemma2`] — EmbeddingGemma 2 text, image and audio
+//!   embeddings run through vqtrs' candle backend.
 //!
 //! Names resolve either by Hugging Face `code` (e.g.
 //! `"intfloat/multilingual-e5-small"`) or by fastembed `variant`
@@ -21,14 +23,16 @@ pub enum Backend {
     Onnx,
     /// Qwen3-Embedding running through the candle backend.
     Qwen3,
+    /// EmbeddingGemma 2 running through vqtrs' candle backend.
+    EmbeddingGemma2,
 }
 
 /// A single text-embedding model in the catalog.
 #[derive(Debug, Clone, Copy)]
 pub struct ModelInfo {
-    /// Hugging Face style code (also the repo id for Qwen3 models).
+    /// Hugging Face style code (also the repo id for candle models).
     pub code: &'static str,
-    /// fastembed variant name (empty for Qwen3 models).
+    /// fastembed variant name (empty for candle models).
     pub variant: &'static str,
     /// Output vector dimensionality.
     pub dimensions: usize,
@@ -62,9 +66,12 @@ pub enum Resolved {
     /// A Qwen3 model identified by repository id, with known dimensionality.
     #[cfg(feature = "qwen3")]
     Qwen3 { repo: String, dimensions: usize },
+    /// An EmbeddingGemma 2 model identified by repository id, with known dimensionality.
+    #[cfg(feature = "embeddinggemma2")]
+    EmbeddingGemma2 { repo: String, dimensions: usize },
 }
 
-/// The full text-embedding catalog (ONNX models plus Qwen3 candle models).
+/// The full text-embedding catalog (ONNX and candle models).
 #[must_use]
 pub const fn dense_models() -> &'static [ModelInfo] {
     DENSE_MODELS
@@ -267,6 +274,13 @@ const DENSE_MODELS: &[ModelInfo] = &[
         description: "Gemma 300M embedding model",
         backend: Backend::Onnx,
     },
+    ModelInfo {
+        code: "google/embeddinggemma-2",
+        variant: "",
+        dimensions: 768,
+        description: "EmbeddingGemma 2 text, image and audio (candle)",
+        backend: Backend::EmbeddingGemma2,
+    },
     // --- Snowflake Arctic ---
     ModelInfo {
         code: "snowflake/snowflake-arctic-embed-xs",
@@ -345,7 +359,8 @@ const RERANK_MODELS: &[RerankInfo] = &[
 /// # Errors
 ///
 /// Returns [`VqtrsError::UnknownModel`] if the name matches no catalog entry and
-/// is not a parseable fastembed variant.
+/// is not a parseable fastembed variant. Returns [`VqtrsError::Backend`] if the
+/// model requires a feature that was not enabled at build time.
 pub fn resolve_dense(name: &str) -> Result<Resolved> {
     if let Some(info) = DENSE_MODELS
         .iter()
@@ -360,6 +375,15 @@ pub fn resolve_dense(name: &str) -> Result<Resolved> {
             #[cfg(not(feature = "qwen3"))]
             Backend::Qwen3 => Err(VqtrsError::Backend(format!(
                 "model `{name}` needs the `qwen3` feature (rebuild with --features qwen3)"
+            ))),
+            #[cfg(feature = "embeddinggemma2")]
+            Backend::EmbeddingGemma2 => Ok(Resolved::EmbeddingGemma2 {
+                repo: info.code.to_owned(),
+                dimensions: info.dimensions,
+            }),
+            #[cfg(not(feature = "embeddinggemma2"))]
+            Backend::EmbeddingGemma2 => Err(VqtrsError::Backend(format!(
+                "model `{name}` needs the `embeddinggemma2` feature (rebuild with --features embeddinggemma2)"
             ))),
             Backend::Onnx => info.variant.parse::<EmbeddingModel>().map_or_else(
                 |_| Err(VqtrsError::UnknownModel(name.to_owned())),
@@ -471,8 +495,8 @@ pub fn resolve_m3(name: &str) -> Result<Bgem3Model> {
 #[cfg(test)]
 mod tests {
     use super::{
-        Backend, DENSE_MODELS, Resolved, dense_models, rerank_models, resolve_dense, resolve_m3,
-        resolve_reranker, resolve_sparse, sparse_models,
+        Backend, DENSE_MODELS, Resolved, dense_models, hf_repo, rerank_models, resolve_dense,
+        resolve_m3, resolve_reranker, resolve_sparse, sparse_models,
     };
 
     #[test]
@@ -482,6 +506,8 @@ mod tests {
             Resolved::Onnx { dimensions, .. } => assert_eq!(dimensions, Some(384)),
             #[cfg(feature = "qwen3")]
             Resolved::Qwen3 { .. } => panic!("expected ONNX backend"),
+            #[cfg(feature = "embeddinggemma2")]
+            Resolved::EmbeddingGemma2 { .. } => panic!("expected ONNX backend"),
         }
     }
 
@@ -501,6 +527,8 @@ mod tests {
                 assert_eq!(dimensions, 1024);
             }
             Resolved::Onnx { .. } => panic!("expected Qwen3 backend"),
+            #[cfg(feature = "embeddinggemma2")]
+            Resolved::EmbeddingGemma2 { .. } => panic!("expected Qwen3 backend"),
         }
     }
 
@@ -508,6 +536,46 @@ mod tests {
     #[test]
     fn qwen3_model_errors_without_feature() {
         assert!(resolve_dense("Qwen/Qwen3-Embedding-0.6B").is_err());
+    }
+
+    #[test]
+    fn embeddinggemma2_catalog_metadata() {
+        let model = dense_models()
+            .iter()
+            .find(|m| m.code == "google/embeddinggemma-2")
+            .expect("EmbeddingGemma 2 is always listed");
+        assert_eq!(model.backend, Backend::EmbeddingGemma2);
+        assert_eq!(model.dimensions, 768);
+        assert!(model.variant.is_empty());
+        assert_eq!(hf_repo(model.code), Some("google/embeddinggemma-2"));
+        assert_eq!(hf_repo(""), None);
+    }
+
+    #[cfg(feature = "embeddinggemma2")]
+    #[test]
+    fn resolves_embeddinggemma2_by_repo() {
+        let Resolved::EmbeddingGemma2 { repo, dimensions } =
+            resolve_dense("google/embeddinggemma-2").expect("known EmbeddingGemma 2")
+        else {
+            panic!("expected EmbeddingGemma 2 backend");
+        };
+        assert_eq!(repo, crate::embedding_gemma2::EMBEDDING_GEMMA2_REPO);
+        assert_eq!(
+            dimensions,
+            crate::embedding_gemma2::EMBEDDING_GEMMA2_DIMENSIONS
+        );
+    }
+
+    #[cfg(not(feature = "embeddinggemma2"))]
+    #[test]
+    fn embeddinggemma2_model_errors_without_feature() {
+        match resolve_dense("google/embeddinggemma-2") {
+            Err(crate::error::VqtrsError::Backend(message)) => {
+                assert!(message.contains("google/embeddinggemma-2"));
+                assert!(message.contains("--features embeddinggemma2"));
+            }
+            _ => panic!("expected a helpful missing-feature error"),
+        }
     }
 
     #[test]
@@ -526,11 +594,13 @@ mod tests {
     fn every_catalog_entry_resolves() {
         for m in dense_models() {
             let resolved = resolve_dense(m.code);
-            // Qwen3 entries only resolve when the `qwen3` feature is built in.
-            if m.backend == Backend::Qwen3 && cfg!(not(feature = "qwen3")) {
+            // Candle entries only resolve when their feature is built in.
+            if (m.backend == Backend::Qwen3 && cfg!(not(feature = "qwen3")))
+                || (m.backend == Backend::EmbeddingGemma2 && cfg!(not(feature = "embeddinggemma2")))
+            {
                 assert!(
                     resolved.is_err(),
-                    "`{}` must need the qwen3 feature",
+                    "`{}` must need its backend feature",
                     m.code
                 );
             } else {
@@ -538,8 +608,8 @@ mod tests {
             }
             assert_eq!(
                 m.variant.is_empty(),
-                m.backend == Backend::Qwen3,
-                "variant emptiness must match Qwen3 backend for `{}`",
+                m.backend != Backend::Onnx,
+                "variant emptiness must match candle backend for `{}`",
                 m.code,
             );
         }

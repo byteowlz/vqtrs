@@ -1,12 +1,14 @@
 //! `vqtrs-core` — a lean local embeddings and reranking engine.
 //!
 //! `vqtrs-core` does embeddings and reranking and nothing else. It wraps
-//! [`fastembed`] with two backends behind one small API:
+//! [`fastembed`] and optional candle backends behind one small API:
 //!
 //! - **ONNX** (via `ort`) for the catalog of small, fast sentence-transformer
 //!   models.
 //! - **Qwen3** (via the candle backend) for the SOTA open-weight
 //!   Qwen3-Embedding models (0.6B / 4B / 8B).
+//! - **EmbeddingGemma 2** (opt-in `embeddinggemma2`, CPU candle backend) for
+//!   text, image and WAV audio embeddings.
 //!
 //! Plus cross-encoder reranking ([`Reranker`]) over the ONNX BGE/Jina rerankers.
 //!
@@ -40,7 +42,8 @@ pub use catalog::{
 pub use embed::Engine;
 #[cfg(feature = "embeddinggemma2")]
 pub use embedding_gemma2::{
-    EMBEDDING_GEMMA2_DIMENSIONS, EMBEDDING_GEMMA2_REPO, EmbeddingGemma2, Forward, Gemma2Input,
+    EMBEDDING_GEMMA2_DIMENSIONS, EMBEDDING_GEMMA2_MAX_TOKENS, EMBEDDING_GEMMA2_REPO,
+    EmbeddingGemma2, Forward, Gemma2Input,
 };
 pub use error::{Result, VqtrsError};
 pub use rerank::{Ranked, Reranker};

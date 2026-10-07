@@ -1,0 +1,143 @@
+Original libjpeg-turbo source notices for the routines ported into jpeg.rs.
+
+This is a modified Rust implementation, not unmodified libjpeg-turbo.
+See libjpeg-turbo.LICENSE.md and README.ijg for the distribution terms.
+
+jidctint.c
+/*
+ * jidctint.c
+ *
+ * This file was part of the Independent JPEG Group's software:
+ * Copyright (C) 1991-1998, Thomas G. Lane.
+ * Modification developed 2002-2018 by Guido Vollbeding.
+ * libjpeg-turbo Modifications:
+ * Copyright (C) 2015, 2020, 2022, 2026, D. R. Commander.
+ * For conditions of distribution and use, see the accompanying README.ijg
+ * file.
+ *
+ * This file contains a slower but more accurate integer implementation of the
+ * inverse DCT (Discrete Cosine Transform).  In the IJG code, this routine
+ * must also perform dequantization of the input coefficients.
+ *
+ * A 2-D IDCT can be done by 1-D IDCT on each column followed by 1-D IDCT
+ * on each row (or vice versa, but it's more convenient to emit a row at
+ * a time).  Direct algorithms are also available, but they are much more
+ * complex and seem not to be any faster when reduced to code.
+ *
+ * This implementation is based on an algorithm described in
+ *   C. Loeffler, A. Ligtenberg and G. Moschytz, "Practical Fast 1-D DCT
+ *   Algorithms with 11 Multiplications", Proc. Int'l. Conf. on Acoustics,
+ *   Speech, and Signal Processing 1989 (ICASSP '89), pp. 988-991.
+ * The primary algorithm described there uses 11 multiplies and 29 adds.
+ * We use their alternate method with 12 multiplies and 32 adds.
+ * The advantage of this method is that no data path contains more than one
+ * multiplication; this allows a very simple and accurate implementation in
+ * scaled fixed-point arithmetic, with a minimal number of shifts.
+ *
+ * We also provide IDCT routines with various output sample block sizes for
+ * direct resolution reduction or enlargement without additional resampling:
+ * NxN (N=1...16) samples for one 8x8 input DCT block.
+ *
+ * For N<8 we simply take the corresponding low-frequency coefficients of
+ * the 8x8 input DCT block and apply an NxN point IDCT on the sub-block
+ * to yield the downscaled outputs.
+ * This can be seen as direct low-pass downsampling from the DCT domain
+ * point of view rather than the usual spatial domain point of view,
+ * yielding significant computational savings and results at least
+ * as good as common bilinear (averaging) spatial downsampling.
+ *
+ * For N>8 we apply a partial NxN IDCT on the 8 input coefficients as
+ * lower frequencies and higher frequencies assumed to be zero.
+ * It turns out that the computational effort is similar to the 8x8 IDCT
+ * regarding the output size.
+ * Furthermore, the scaling and descaling is the same for all IDCT sizes.
+ *
+ * CAUTION: We rely on the FIX() macro except for the N=1,2,4,8 cases
+ * since there would be too many additional constants to pre-calculate.
+ */
+
+jdsample.c
+/*
+ * jdsample.c
+ *
+ * This file was part of the Independent JPEG Group's software:
+ * Copyright (C) 1991-1996, Thomas G. Lane.
+ * libjpeg-turbo Modifications:
+ * Copyright 2009 Pierre Ossman <ossman@cendio.se> for Cendio AB
+ * Copyright (C) 2010, 2015-2016, 2022, 2024-2026, D. R. Commander.
+ * Copyright (C) 2014, MIPS Technologies, Inc., California.
+ * Copyright (C) 2015, Google, Inc.
+ * Copyright (C) 2019-2020, Arm Limited.
+ * For conditions of distribution and use, see the accompanying README.ijg
+ * file.
+ *
+ * This file contains upsampling routines.
+ *
+ * Upsampling input data is counted in "row groups".  A row group is defined to
+ * be (v_samp_factor * DCT_scaled_size / min_DCT_scaled_size) sample rows of
+ * each component.  Upsampling will normally produce max_v_samp_factor rows of
+ * each component from each row group (but this could vary if the upsampler is
+ * applying a scale factor of its own).
+ *
+ * An excellent reference for image resampling is
+ *   Digital Image Warping, George Wolberg, 1990.
+ *   Pub. by IEEE Computer Society Press, Los Alamitos, CA. ISBN 0-8186-8944-7.
+ */
+
+jdcolor.c
+/*
+ * jdcolor.c
+ *
+ * This file was part of the Independent JPEG Group's software:
+ * Copyright (C) 1991-1997, Thomas G. Lane.
+ * Modified 2011 by Guido Vollbeding.
+ * libjpeg-turbo Modifications:
+ * Copyright 2009 Pierre Ossman <ossman@cendio.se> for Cendio AB
+ * Copyright (C) 2009, 2011-2012, 2014-2015, 2022, 2024, D. R. Commander.
+ * Copyright (C) 2013, Linaro Limited.
+ * For conditions of distribution and use, see the accompanying README.ijg
+ * file.
+ *
+ * This file contains output colorspace conversion routines.
+ */
+
+jdmainct.c
+/*
+ * jdmainct.c
+ *
+ * This file was part of the Independent JPEG Group's software:
+ * Copyright (C) 1994-1996, Thomas G. Lane.
+ * libjpeg-turbo Modifications:
+ * Copyright (C) 2010, 2016, 2022, 2024, 2026, D. R. Commander.
+ * For conditions of distribution and use, see the accompanying README.ijg
+ * file.
+ *
+ * This file contains the main buffer controller for decompression.
+ * The main buffer lies between the JPEG decompressor proper and the
+ * post-processor; it holds downsampled data in the JPEG colorspace.
+ *
+ * Note that this code is bypassed in raw-data mode, since the application
+ * supplies the equivalent of the main buffer in that case.
+ */
+
+jdmaster.c
+/*
+ * jdmaster.c
+ *
+ * This file was part of the Independent JPEG Group's software:
+ * Copyright (C) 1991-1997, Thomas G. Lane.
+ * Modified 2002-2009 by Guido Vollbeding.
+ * Lossless JPEG Modifications:
+ * Copyright (C) 1999, Ken Murchison.
+ * libjpeg-turbo Modifications:
+ * Copyright (C) 2009-2011, 2016, 2019, 2022-2024, 2026, D. R. Commander.
+ * Copyright (C) 2013, Linaro Limited.
+ * Copyright (C) 2015, Google, Inc.
+ * For conditions of distribution and use, see the accompanying README.ijg
+ * file.
+ *
+ * This file contains master control logic for the JPEG decompressor.
+ * These routines are concerned with selecting the modules to be executed
+ * and with determining the number of passes and the work to be done in each
+ * pass.
+ */

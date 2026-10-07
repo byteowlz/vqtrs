@@ -12,6 +12,12 @@ nothing else — one modular provider you can drop in front of anything.
 - **`vqtrs-api`** (server) — OpenAI-compatible `/v1/embeddings` plus a `/rerank`
   endpoint.
 
+The opt-in **EmbeddingGemma 2** backend (`embeddinggemma2`) embeds text,
+images and 16 kHz WAV audio through the core library, CLI and HTTP API.
+Its tested Apple Silicon CPU outputs are bit-identical to the pinned Python
+reference. See [usage, limits and parity tests](docs/embeddinggemma2-parity.md).
+Video is not implemented.
+
 ## Quick start
 
 ```bash
@@ -27,6 +33,7 @@ just install-all      # interactive: detects host, picks GPU + Qwen3
 just install-cuda     # NVIDIA: ONNX + Qwen3 on GPU (CUDA <= 13.2)
 just install-cuda13   # NVIDIA: same, for CUDA 13.3+
 just install-mac      # Apple Silicon: ONNX CoreML + Qwen3 Metal
+just install-eg2      # CPU EmbeddingGemma 2: text, images, 16 kHz WAV
 ```
 
 ### CLI
