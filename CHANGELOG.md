@@ -21,12 +21,12 @@ All notable changes to this project will be documented in this file.
   constructors, native GPU norms/attention/conformer operations and a warm
   benchmark harness. CPU bit identity is preserved; GPU parity is measured
   with tolerances, not claimed byte-identical. See `docs/embeddinggemma2-gpu.md`
-  for the verified hardware and outstanding full-model CUDA validation.
+  for verified full-model Metal/RTX 4090 CUDA results and decoder-platform qualifications.
 - **EmbeddingGemma 2 video (vqtrs-1a8h).** Typed decoded RGB frames and bounded
   inline-container decoding through FFmpeg, exposed through Engine, CLI and
   HTTP/UDS. Sampling follows checkpoint defaults and preprocessing uses
   torchvision-compatible uint8 bicubic/rescaling, not the PIL image path.
-  Independent PyAV codec and CPU/Metal model parity tooling covers sampled
+  Independent PyAV codec and CPU/Metal/CUDA model parity tooling covers sampled
   frames, tokens, intermediate states and normalized output. See
   `docs/embeddinggemma2-video.md` for codec/platform and resource limits.
 

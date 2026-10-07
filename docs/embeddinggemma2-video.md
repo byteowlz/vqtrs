@@ -127,7 +127,8 @@ Device constructors are explicit, with no fallback. CPU requires bit identity
 for all tensors. GPU preserves strict IDs/indices/pixels/positions and requires
 final embedding maximum absolute error ≤2e-4 and cosine ≥0.99999. Intermediate
 GPU tensor differences are reported, not mislabeled as bit-identical. CUDA
-requires `embeddinggemma2-cuda` and appropriate hardware; CUDA was not tested.
+requires `embeddinggemma2-cuda` and appropriate hardware. Both Metal and CUDA
+have measured full-model results below.
 
 Oracle: checkpoint revision `914f7f89142e33e77833254d9c9b90c3cef7303b`, CPU f32,
 Torch 2.14.1, torchvision 0.29.1, transformers 5.19.0, Pillow 12.3.0, NumPy 2.4.6.
@@ -135,7 +136,7 @@ PyAV 18.1.0 is independently pinned. The manifest records the actual checkpoint
 video settings, PyAV's linked library versions and both FFmpeg CLI versions.
 The reference does **not** read RGB frames from the Rust/FFmpeg decoder: Python
 uses PyAV `VideoFrame.to_ndarray`, and Rust uses the FFmpeg CLI. **Raw sampled RGB
-bytes are compared before resize.** Current proof uses FFmpeg CLI 8.1.1 and
+bytes are compared before resize.** The Apple codec proof uses FFmpeg CLI 8.1.1 and
 PyAV libavcodec 62.28.102 / libavformat 62.12.102 / libswscale 9.5.102.
 
 The codec proof covers FFV1/bgr0 in MKV and H.264/yuv420p in MP4 (8 fps, 80×48),
@@ -159,7 +160,7 @@ explicit actual count/rate metadata.
 The example checks every case containing model tensors, using manifest counts
 rather than fixed budgets, on CPU or the explicitly selected GPU.
 
-**All five CPU forwards** (the 32-frame decoded-array uniform-cap case and both
+**All five Apple CPU forwards** (the 32-frame decoded-array uniform-cap case and both
 decoded/container forms of FFV1/MKV and H.264/MP4) match IDs, patches/positions,
 video features, every text hidden state, token embeddings and final embeddings
 **bit for bit**. The 32-frame case has 70 source frames without timing, **130
@@ -174,3 +175,44 @@ model-reference cases.
 Intermediate GPU tensors differ, as reported by the runner. This is canonical
 pinned checkpoint CPU parity and a measured Metal tolerance result, not a GPU
 or cross-platform bit-identity promise.
+
+## CUDA and platform-specific decoder RGB
+
+**All five CUDA forwards** pass on RTX 4090 / CUDA 12.8: final maximum errors
+1.341e-7 (32-frame cap), 3.874e-7 (FFV1), and 1.588e-7 (native Linux H.264),
+cosine 1.000000000 at nine printed digits. IDs, sampling, positions and processed
+pixels remain exact against the appropriate RGB oracle. Live CUDA HTTP,
+local CLI and warm UDS smoke tests include video.
+
+Do not mistake decoder drift for GPU error. For the same synthetic H.264 clip,
+Linux FFmpeg 6.1.1 and independent Linux PyAV 18.1.0 produce **identical RGB**.
+But 218,752 of 276,480 RGB bytes differ from Apple PyAV (maximum two byte values),
+even though PyAV and linked-library versions match. Those different pixels
+change the final **CPU** vector by max 0.00192328. A private FFmpeg 8.1.1 generic
+x86 build did not restore Apple equality either. This is architecture-dependent
+color conversion, not a failed CUDA tower or an accepted relaxation of the
+embedding tolerance. Container-vector identity across these platforms is not
+claimed; `VideoFrames` with identical RGB provides a codec-independent boundary.
+
+The native-RGB tool proves FFmpeg/PyAV equality on the decoder host, exports
+hashed RGB plus versions, then regenerates only that case's HF model oracle on
+the pinned Apple CPU host. It checks the container hash, geometry and token IDs,
+keeps the original reference untouched, and records the decoder evidence in a
+new manifest. Synthetic data stays outside git:
+
+```sh
+# On the native decoder/CUDA host, with the original fixtures present:
+uv run --no-project --with av==18.1.0 --with numpy==2.4.6 -- python -I \
+  scripts/parity/eg2_video_native_rgb_reference.py export \
+  --reference /tmp/eg2-video-ref-140 --out /tmp/eg2-native-rgb
+
+# Copy that exported directory to the pinned CPU reference host first:
+uv run --no-project --python <cached-reference-python> -- python -I \
+  scripts/parity/eg2_video_native_rgb_reference.py rebase \
+  --reference /tmp/eg2-video-ref-140 --rgb /tmp/eg2-native-rgb \
+  --out /tmp/eg2-video-native-ref --model-dir <checkpoint-directory>
+
+# Copy the complete new reference back to the CUDA host before comparison:
+cargo run --release -p vqtrs-core --features embeddinggemma2-cuda \
+  --example eg2_video_parity -- /tmp/eg2-video-native-ref <checkpoint-directory> cuda
+```

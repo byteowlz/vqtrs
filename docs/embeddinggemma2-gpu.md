@@ -57,17 +57,30 @@ Verified on Apple Silicon Metal, f32:
 - Five GPU operation/conformer synthetic tests pass. The same tests pass
   on NVIDIA RTX 4090, CUDA toolkit 12.8; they assert GPU residency rather than
   accepting a silent CPU fallback.
-- CUDA workspace/all-target check and strict Clippy pass on Linux/NVIDIA.
-  **Full-checkpoint CUDA vector parity is not yet verified:** the available
-  GPU's existing workload leaves insufficient free memory. Do not conflate
-  compilation/small-kernel tests with full-model validation.
-- Video model/codec evidence is recorded separately in
-  [video parity](embeddinggemma2-video.md).
+
+Verified on NVIDIA RTX 4090, CUDA toolkit 12.8, Linux x86_64, f32:
+
+- All 19 original text/image/audio cases pass against the pinned CPU oracle:
+  largest final-vector error 7.246e-7, all printed cosines 1.000000000;
+  preprocessing, IDs and masks remain exact. All five video forwards also
+  pass using platform-verified RGB (see the decoder qualification below).
+- Five native GPU operation/conformer tests, workspace/all-target check and
+  strict Clippy pass. A disposable CUDA server passes mixed HTTP, standard
+  text, local CLI and warm UDS smoke tests, including video and safety limits.
+- H.264 RGB conversion differs between Apple and x86_64 even with the same
+  PyAV/library versions. Linux FFmpeg 6.1.1 RGB matches independent Linux
+  PyAV 18.1.0 exactly. Its model oracle is regenerated on the pinned CPU host
+  for those identical native RGB bytes; the original reference is untouched.
+  This does **not** claim cross-platform byte identity for container vectors.
+Video model/codec evidence and native-RGB reference commands are recorded in
+[video parity](embeddinggemma2-video.md).
 
 A local warm five-iteration image benchmark (`photo_1037x761.png`) measured
 mean CPU 11,660 ms versus Metal 534 ms, approximately 22x for that fixture.
 This includes preprocessing and synchronized output copying, excludes model
 loading and three warmups, and is not a general speedup guarantee.
+The same warm image fixture on RTX 4090 measured mean 108.702 ms
+(min 108.281, max 109.297); no cross-machine CPU speedup is claimed.
 
 ## Reproduce
 
