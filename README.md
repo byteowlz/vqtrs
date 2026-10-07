@@ -235,6 +235,11 @@ crates/
   vqtrs-api/    # OpenAI-compatible HTTP server
 ```
 
+## License
+
+[MIT](LICENSE) for original vqtrs code. Ported third-party code retains its
+[upstream notices and licenses](crates/vqtrs-core/src/embedding_gemma2/NOTICE.md).
+
 ## Development
 
 ```bash
