@@ -1,6 +1,7 @@
-//! Image/WAV embeddings using a warm daemon or the in-process Gemma backend.
+//! Image/WAV/video embeddings using a daemon or the in-process Gemma backend.
 
-use std::path::PathBuf;
+use std::io::Read as _;
+use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 use base64::{Engine as _, engine::general_purpose::STANDARD};
@@ -14,11 +15,13 @@ use super::{DaemonEmbed, EmbedItem, EmbedOutput, print_json, try_daemon};
 enum Modality {
     Image,
     Audio,
+    Video,
 }
 
 #[derive(Debug, Args)]
 pub struct MediaArgs {
-    /// Image files or 16 kHz mono/stereo WAV clips (one embedding per file)
+    /// Images, 16 kHz WAV clips, or MP4/MKV videos (one embedding per file).
+    /// Video requires ffmpeg/ffprobe; see the bounded video decoder contract.
     #[arg(required = true)]
     paths: Vec<PathBuf>,
     /// The modality shared by these files
@@ -40,6 +43,7 @@ pub struct MediaArgs {
 enum Encoded {
     Image { data: String },
     Audio { data: String },
+    Video { data: String },
 }
 
 #[derive(Serialize)]
@@ -48,11 +52,29 @@ struct Body<'a> {
     input: Vec<Encoded>,
 }
 
+fn read_media_file(path: &Path, modality: Modality) -> Result<Vec<u8>> {
+    if !matches!(modality, Modality::Video) {
+        return std::fs::read(path).with_context(|| format!("reading {}", path.display()));
+    }
+    let file = std::fs::File::open(path).with_context(|| format!("opening {}", path.display()))?;
+    let mut bytes = Vec::new();
+    // Bound the read itself, including growing/nonregular caller-local files.
+    file.take(16 * 1024 * 1024 + 1)
+        .read_to_end(&mut bytes)
+        .with_context(|| format!("reading {}", path.display()))?;
+    anyhow::ensure!(
+        bytes.len() <= 16 * 1024 * 1024,
+        "{}: video exceeds 16 MiB",
+        path.display()
+    );
+    Ok(bytes)
+}
+
 pub fn run(args: &MediaArgs) -> Result<()> {
     let files: Vec<Vec<u8>> = args
         .paths
         .iter()
-        .map(|p| std::fs::read(p).with_context(|| format!("reading {}", p.display())))
+        .map(|p| read_media_file(p, args.modality))
         .collect::<Result<_>>()?;
     if !args.no_daemon {
         let input = files
@@ -62,6 +84,7 @@ pub fn run(args: &MediaArgs) -> Result<()> {
                 match args.modality {
                     Modality::Image => Encoded::Image { data },
                     Modality::Audio => Encoded::Audio { data },
+                    Modality::Video => Encoded::Video { data },
                 }
             })
             .collect();
@@ -86,6 +109,7 @@ pub fn run(args: &MediaArgs) -> Result<()> {
         .map(|bytes| match args.modality {
             Modality::Image => Gemma2Input::Image(bytes),
             Modality::Audio => Gemma2Input::Audio(bytes),
+            Modality::Video => Gemma2Input::Video(bytes),
         })
         .collect();
     let vectors = engine
@@ -131,5 +155,48 @@ mod tests {
         assert_eq!(args.paths.len(), 2);
         assert_eq!(args.model, EMBEDDING_GEMMA2_REPO);
         assert!(args.no_daemon);
+    }
+
+    #[test]
+    fn oversized_video_read_is_rejected_before_model_loading() {
+        let path =
+            std::env::temp_dir().join(format!("vqtrs-cli-video-limit-{}", std::process::id()));
+        let file = std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&path)
+            .unwrap();
+        file.set_len(16 * 1024 * 1024 + 1).unwrap();
+        let result = read_media_file(&path, Modality::Video);
+        drop(file);
+        std::fs::remove_file(&path).unwrap();
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("video exceeds 16 MiB")
+        );
+    }
+
+    #[test]
+    fn video_modality_and_daemon_encoding() {
+        let cli = super::super::Cli::try_parse_from([
+            "vqtrs",
+            "embed-media",
+            "--modality",
+            "video",
+            "clip.mp4",
+            "--no-daemon",
+        ])
+        .unwrap();
+        let super::super::Command::EmbedMedia(args) = cli.command else {
+            panic!("wrong command");
+        };
+        assert!(matches!(args.modality, Modality::Video));
+        let json = serde_json::to_value(Encoded::Video {
+            data: STANDARD.encode([1, 2, 3]),
+        })
+        .unwrap();
+        assert_eq!(json, serde_json::json!({"modality":"video", "data":"AQID"}));
     }
 }

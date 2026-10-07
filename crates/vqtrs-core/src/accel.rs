@@ -1,4 +1,4 @@
-//! Hardware acceleration selection for the ONNX and Qwen3 backends.
+//! Hardware acceleration selection for ONNX and candle model backends.
 //!
 //! ONNX models register `ort` execution providers (CUDA / TensorRT / CoreML /
 //! DirectML) according to the enabled cargo features; the Qwen3 candle backend
@@ -70,4 +70,31 @@ pub fn qwen3_device() -> (candle_core::Device, candle_core::DType) {
         return (device, DType::F16);
     }
     (Device::Cpu, DType::F32)
+}
+
+/// Default EmbeddingGemma 2 device, CPU unless its own GPU feature is enabled.
+#[cfg(all(
+    feature = "embeddinggemma2",
+    not(any(feature = "embeddinggemma2-cuda", feature = "embeddinggemma2-metal"))
+))]
+#[must_use]
+pub const fn embeddinggemma2_device() -> candle_core::Device {
+    candle_core::Device::Cpu
+}
+
+/// Default EmbeddingGemma 2 device, preferring an enabled GPU, then CPU.
+///
+/// Explicit library constructors can select a device without this fallback.
+#[cfg(any(feature = "embeddinggemma2-cuda", feature = "embeddinggemma2-metal"))]
+#[must_use]
+pub fn embeddinggemma2_device() -> candle_core::Device {
+    #[cfg(feature = "embeddinggemma2-cuda")]
+    if let Ok(device) = candle_core::Device::new_cuda(0) {
+        return device;
+    }
+    #[cfg(feature = "embeddinggemma2-metal")]
+    if let Ok(device) = candle_core::Device::new_metal(0) {
+        return device;
+    }
+    candle_core::Device::Cpu
 }

@@ -15,8 +15,20 @@ All notable changes to this project will be documented in this file.
   reproducible parity tooling. Catalog/Engine support, `vqtrs embed-media`
   and a bounded `/embeddings/multimodal` HTTP/UDS route are included; live
   integration checks also match the reference byte-for-byte. The feature stays
-  off by default. Video is not yet implemented; see
-  `docs/embeddinggemma2-parity.md` for scope and the numerical contract.
+  off by default; see `docs/embeddinggemma2-parity.md` for the CPU numerical contract.
+- **EmbeddingGemma 2 CUDA/Metal execution (vqtrs-v7nq).** Independent
+  `embeddinggemma2-cuda` / `embeddinggemma2-metal` features, explicit device
+  constructors, native GPU norms/attention/conformer operations and a warm
+  benchmark harness. CPU bit identity is preserved; GPU parity is measured
+  with tolerances, not claimed byte-identical. See `docs/embeddinggemma2-gpu.md`
+  for the verified hardware and outstanding full-model CUDA validation.
+- **EmbeddingGemma 2 video (vqtrs-1a8h).** Typed decoded RGB frames and bounded
+  inline-container decoding through FFmpeg, exposed through Engine, CLI and
+  HTTP/UDS. Sampling follows checkpoint defaults and preprocessing uses
+  torchvision-compatible uint8 bicubic/rescaling, not the PIL image path.
+  Independent PyAV codec and CPU/Metal model parity tooling covers sampled
+  frames, tokens, intermediate states and normalized output. See
+  `docs/embeddinggemma2-video.md` for codec/platform and resource limits.
 
 ### Fixed
 

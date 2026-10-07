@@ -43,7 +43,7 @@ pub use embed::Engine;
 #[cfg(feature = "embeddinggemma2")]
 pub use embedding_gemma2::{
     EMBEDDING_GEMMA2_DIMENSIONS, EMBEDDING_GEMMA2_MAX_TOKENS, EMBEDDING_GEMMA2_REPO,
-    EmbeddingGemma2, Forward, Gemma2Input,
+    EmbeddingGemma2, Forward, Gemma2Input, Gemma2VideoFrame, Gemma2VideoMetadata,
 };
 pub use error::{Result, VqtrsError};
 pub use rerank::{Ranked, Reranker};

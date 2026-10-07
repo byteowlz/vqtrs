@@ -101,6 +101,7 @@ pub struct Config {
     #[serde(rename = "eoa_token_index")]
     pub eoa_token_id: u32,
     pub image_token_id: u32,
+    pub video_token_id: u32,
     pub boi_token_id: u32,
     pub eoi_token_id: u32,
 }

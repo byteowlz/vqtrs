@@ -106,11 +106,13 @@ struct Args {
     reference: PathBuf,
     model_dir: Option<PathBuf>,
     cases: Option<PathBuf>,
+    device: candle_core::Device,
 }
 
 fn parse_args() -> Result<Args> {
     let mut args = std::env::args().skip(1);
     let (mut reference, mut model_dir, mut cases) = (None, None, None);
+    let mut device = candle_core::Device::Cpu;
     while let Some(flag) = args.next() {
         let value = args
             .next()
@@ -119,6 +121,7 @@ fn parse_args() -> Result<Args> {
             "--reference" => reference = Some(PathBuf::from(value)),
             "--model-dir" => model_dir = Some(PathBuf::from(value)),
             "--cases" => cases = Some(PathBuf::from(value)),
+            "--device" => device = parse_device(&value)?,
             other => bail!("unknown flag {other}"),
         }
     }
@@ -126,6 +129,16 @@ fn parse_args() -> Result<Args> {
         reference: reference.context("--reference is required")?,
         model_dir,
         cases,
+        device,
+    })
+}
+
+fn parse_device(name: &str) -> Result<candle_core::Device> {
+    Ok(match name {
+        "cpu" => candle_core::Device::Cpu,
+        "metal" => candle_core::Device::new_metal(0)?,
+        "cuda" => candle_core::Device::new_cuda(0)?,
+        other => bail!("unknown device {other}; expected cpu, cuda or metal"),
     })
 }
 
@@ -134,6 +147,8 @@ fn parse_args() -> Result<Args> {
 struct Tally {
     compared: usize,
     differing: usize,
+    failed: usize,
+    gpu: bool,
 }
 
 impl Tally {
@@ -141,6 +156,11 @@ impl Tally {
         self.compared += 1;
         if !diff.bit_identical() {
             self.differing += 1;
+        }
+        // Internal tensor differences are reported, not hidden. GPU acceptance
+        // gates exact preprocessing/IDs and final embedding accuracy separately.
+        if !self.accepts(label, diff) {
+            self.failed += 1;
         }
         if show || !diff.bit_identical() {
             let tag = if diff.bit_identical() {
@@ -152,10 +172,24 @@ impl Tally {
         }
     }
 
+    fn accepts(&self, label: &str, diff: &Diff) -> bool {
+        if !self.gpu {
+            return diff.bit_identical();
+        }
+        match label {
+            "embedding vs hf" => {
+                diff.max_abs.is_finite() && diff.max_abs <= 2e-4 && diff.cosine >= 0.99999
+            }
+            "pixel values" | "audio mel features" => diff.bit_identical(),
+            _ => true,
+        }
+    }
+
     fn exact(&mut self, label: &str, same: bool) {
         self.compared += 1;
         if !same {
             self.differing += 1;
+            self.failed += 1;
         }
         println!("  {label:20}{}", if same { "IDENTICAL" } else { "DIFFER" });
     }
@@ -324,10 +358,15 @@ fn run() -> Result<bool> {
     println!("reference versions: {}", manifest["versions"]);
 
     let model = match &args.model_dir {
-        Some(dir) => EmbeddingGemma2::from_dir(dir)?,
-        None => EmbeddingGemma2::from_hf(vqtrs_core::EMBEDDING_GEMMA2_REPO)?,
+        Some(dir) if args.device.is_cpu() => EmbeddingGemma2::from_dir(dir)?,
+        Some(dir) => EmbeddingGemma2::from_dir_on(dir, &args.device)?,
+        None => EmbeddingGemma2::from_hf_on(vqtrs_core::EMBEDDING_GEMMA2_REPO, &args.device)?,
     };
-    let mut tally = Tally::default();
+    println!("actual device: {:?}, dtype: f32", model.device());
+    let mut tally = Tally {
+        gpu: !model.device().is_cpu(),
+        ..Tally::default()
+    };
     for case in manifest["cases"]
         .as_array()
         .context("manifest without cases")?
@@ -342,14 +381,18 @@ fn run() -> Result<bool> {
         "compared {} tensors, {} not bit-identical",
         tally.compared, tally.differing
     );
-    Ok(tally.differing == 0)
+    println!(
+        "{} acceptance failures (GPU: max_abs <= 2e-4, cosine >= 0.99999; CPU: bit identity)",
+        tally.failed
+    );
+    Ok(tally.failed == 0)
 }
 
 fn main() -> ExitCode {
     match run() {
         Ok(true) => ExitCode::SUCCESS,
         Ok(false) => {
-            eprintln!("outputs are not bit-identical to the reference");
+            eprintln!("outputs failed the selected device's parity contract");
             ExitCode::FAILURE
         }
         Err(err) => {

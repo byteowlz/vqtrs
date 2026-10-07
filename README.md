@@ -13,10 +13,10 @@ nothing else — one modular provider you can drop in front of anything.
   endpoint.
 
 The opt-in **EmbeddingGemma 2** backend (`embeddinggemma2`) embeds text,
-images and 16 kHz WAV audio through the core library, CLI and HTTP API.
-Its tested Apple Silicon CPU outputs are bit-identical to the pinned Python
-reference. See [usage, limits and parity tests](docs/embeddinggemma2-parity.md).
-Video is not implemented.
+images, 16 kHz WAV audio and video through the core library, CLI and HTTP API.
+CPU reference parity, CUDA/Metal acceleration and bounded FFmpeg decoding are
+optional. See [usage and numerical contract](docs/embeddinggemma2-parity.md),
+[GPU tests](docs/embeddinggemma2-gpu.md) and [video limits](docs/embeddinggemma2-video.md).
 
 ## Quick start
 
@@ -202,6 +202,8 @@ with `--features qwen3`.
 | `directml` | ONNX (ort DirectML EP) | Windows |
 | `qwen3-cuda` | Qwen3 (candle CUDA) | NVIDIA |
 | `qwen3-metal` | Qwen3 (candle Metal) | macOS |
+| `embeddinggemma2-cuda` | EmbeddingGemma 2 (candle CUDA, f32) | NVIDIA |
+| `embeddinggemma2-metal` | EmbeddingGemma 2 (candle Metal, f32) | macOS |
 
 ONNX accel and Qwen3 accel are independent, so the installer composes them per
 host:
@@ -239,6 +241,7 @@ crates/
 
 [MIT](LICENSE) for original vqtrs code. Ported third-party code retains its
 [upstream notices and licenses](crates/vqtrs-core/src/embedding_gemma2/NOTICE.md).
+Downloaded model weights have their own licenses.
 
 ## Development
 

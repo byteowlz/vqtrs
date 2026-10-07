@@ -14,6 +14,7 @@ enum Input {
     Text { text: String },
     Image { data: String },
     Audio { data: String },
+    Video { data: String },
 }
 
 #[derive(Deserialize)]
@@ -36,6 +37,7 @@ enum Decoded {
     Text(String),
     Image(Vec<u8>),
     Audio(Vec<u8>),
+    Video(Vec<u8>),
 }
 
 impl Decoded {
@@ -49,6 +51,7 @@ impl Decoded {
             Input::Text { text } => Ok(Self::Text(text)),
             Input::Image { data } => Ok(Self::Image(decode(data)?)),
             Input::Audio { data } => Ok(Self::Audio(decode(data)?)),
+            Input::Video { data } => Ok(Self::Video(decode(data)?)),
         }
     }
 
@@ -57,6 +60,7 @@ impl Decoded {
             Self::Text(text) => Gemma2Input::Text(text),
             Self::Image(bytes) => Gemma2Input::Image(bytes),
             Self::Audio(bytes) => Gemma2Input::Audio(bytes),
+            Self::Video(bytes) => Gemma2Input::Video(bytes),
         }
     }
 }
@@ -116,7 +120,7 @@ pub async fn embeddings(
         })
         .collect();
     // Token accounting is not yet defined for media; never report an invented
-    // text-byte estimate as the audio/image token count.
+    // text-byte estimate as the audio/image/video token count.
     Ok(Json(Response {
         object: "list",
         data,
@@ -130,7 +134,7 @@ mod tests {
 
     #[test]
     fn mixed_inputs_decode_in_order() {
-        let req: Request = serde_json::from_str(r#"{"input":[{"modality":"text","text":"hello"},{"modality":"image","data":"AQID"},{"modality":"audio","data":"BAU="}]}"#).unwrap();
+        let req: Request = serde_json::from_str(r#"{"input":[{"modality":"text","text":"hello"},{"modality":"image","data":"AQID"},{"modality":"audio","data":"BAU="},{"modality":"video","data":"Bgc="}]}"#).unwrap();
         let decoded: Vec<_> = req
             .input
             .into_iter()
@@ -140,6 +144,7 @@ mod tests {
         assert!(matches!(decoded[0].input(), Gemma2Input::Text("hello")));
         assert!(matches!(decoded[1].input(), Gemma2Input::Image([1, 2, 3])));
         assert!(matches!(decoded[2].input(), Gemma2Input::Audio([4, 5])));
+        assert!(matches!(decoded[3].input(), Gemma2Input::Video([6, 7])));
     }
 
     #[test]
@@ -154,13 +159,28 @@ mod tests {
                 ..
             })
         ));
-        for field in ["url", "path"] {
-            let json = format!(r#"{{"input":[{{"modality":"image","{field}":"file-or-url"}}]}}"#);
-            assert!(serde_json::from_str::<Request>(&json).is_err());
+        for modality in ["image", "audio", "video"] {
+            for field in ["url", "path"] {
+                let json =
+                    format!(r#"{{"input":[{{"modality":"{modality}","{field}":"file-or-url"}}]}}"#);
+                assert!(serde_json::from_str::<Request>(&json).is_err());
+                let json = format!(
+                    r#"{{"input":[{{"modality":"{modality}","data":"AQ==","{field}":"file-or-url"}}]}}"#
+                );
+                assert!(serde_json::from_str::<Request>(&json).is_err());
+            }
         }
         assert!(
-            serde_json::from_str::<Request>(r#"{"input":[{"modality":"video","data":"AQ=="}]}"#)
-                .is_err()
+            Decoded::decode(Input::Video {
+                data: "data:video/mp4;base64,AQ==".into()
+            })
+            .is_err()
+        );
+        assert!(
+            Decoded::decode(Input::Video {
+                data: "https://example.invalid/clip.mp4".into()
+            })
+            .is_err()
         );
     }
 }

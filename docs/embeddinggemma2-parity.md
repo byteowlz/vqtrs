@@ -1,8 +1,8 @@
 # EmbeddingGemma 2 backend and parity
 
 The optional `vqtrs-core/embeddinggemma2` feature exposes `EmbeddingGemma2`
-and `Gemma2Input::{Text, Image, Audio}`. It loads the text, vision and audio
-towers from `google/embeddinggemma-2` on CPU in f32 and returns a normalized
+and `Gemma2Input::{Text, Image, Audio, Video, VideoFrames}`. It loads the
+text, vision and audio towers from `google/embeddinggemma-2` in f32 and returns a normalized
 768-dimensional vector. No prompt is added to text; supply the checkpoint's
 query/document prompt yourself.
 
@@ -13,13 +13,17 @@ let model = EmbeddingGemma2::from_hf("google/embeddinggemma-2")?;
 let text = model.embed(Gemma2Input::Text("task: search result | query: a bird"))?;
 let image = model.embed(Gemma2Input::Image(&std::fs::read("bird.png")?))?;
 let audio = model.embed(Gemma2Input::Audio(&std::fs::read("bird.wav")?))?;
+let video = model.embed(Gemma2Input::Video(&std::fs::read("bird.mp4")?))?;
 ```
 
 The model is in the normal catalog and `Engine::load("google/embeddinggemma-2")`
 supports text plus `Engine::embed_multimodal`. Both binaries expose the
 `embeddinggemma2` feature. Build/install with `--features embeddinggemma2` or
-`just install-eg2`; it stays off by default. Video is tracked in `vqtrs-1a8h`
-and is not implemented.
+`just install-eg2`; it stays off by default. GPU is selected only when the
+backend's own `embeddinggemma2-cuda` or `embeddinggemma2-metal` feature is enabled.
+See [GPU verification](embeddinggemma2-gpu.md) and [video decoding/parity](embeddinggemma2-video.md).
+`from_dir` remains CPU by default; `from_dir_on` and `from_hf_on` take an explicit
+candle device. Normal `from_hf`/Engine loading prefers an enabled GPU then CPU.
 
 ## CLI and HTTP
 
@@ -27,6 +31,7 @@ and is not implemented.
 vqtrs embed --model google/embeddinggemma-2 "task: search result | query: a bird"
 vqtrs embed-media --modality image bird.png
 vqtrs embed-media --modality audio bird.wav other.wav --no-daemon
+vqtrs embed-media --modality video bird.mp4 --no-daemon
 ```
 
 `embed-media` uses a warm daemon over its Unix socket when available; otherwise
@@ -41,7 +46,8 @@ it loads locally. Each file is a separate embedding, in input order.
   "input": [
     {"modality": "text", "text": "task: search result | query: a bird"},
     {"modality": "image", "data": "<standard base64-encoded image bytes>"},
-    {"modality": "audio", "data": "<standard base64-encoded WAV bytes>"}
+    {"modality": "audio", "data": "<standard base64-encoded WAV bytes>"},
+    {"modality": "video", "data": "<standard base64-encoded MP4/MKV bytes>"}
   ]
 }
 ```
@@ -68,7 +74,7 @@ settings or Python releases. The verified reference is:
   and L2 normalization. Audio uses boolean masks from the `sdpa` configuration;
   its tower computes attention explicitly, without an SDPA kernel.
 
-The eager HF path is the hard parity gate. The public
+The eager HF path is the CPU hard parity gate. The public
 `SentenceTransformer.encode` path uses default SDPA text attention and can
 differ in the last bits even inside Python; its comparison is reported
 separately and does not count as bit identity.
@@ -91,7 +97,7 @@ float64 GEMM results, all exactly equal.
 ## Input limits
 
 - Joint sequences are capped at 8,192 tokens, including BOS/EOS and media
-  placeholders. This CPU implementation materializes attention matrices;
+  placeholders. Both CPU and GPU paths materialize attention matrices;
   it does not implement the checkpoint's full 262,144-token context efficiently.
   Longer input returns an error rather than silently truncating text.
 - Images are capped at 16,777,216 pixels. Dimensions are checked before

@@ -1,8 +1,9 @@
 //! Gemma 4 conformer audio tower and EmbeddingGemma 2's audio projection.
-//! One clip at a time, CPU f32; local attention uses the boolean SDPA mask
-//! semantics (the tower implements its own attention, not SDPA kernels).
+//! One clip at a time, f32. CPU retains the exact PyTorch reference kernels;
+//! GPU inference stays on device using native tensor kernels. Local attention
+//! uses boolean SDPA mask semantics, not SDPA kernels.
 
-use candle_core::{Result, Tensor};
+use candle_core::{D, Device, Result, Tensor};
 use candle_nn::VarBuilder;
 use serde::Deserialize;
 
@@ -37,6 +38,9 @@ fn map(x: &Tensor, f: impl Fn(&mut [f32])) -> Result<Tensor> {
 }
 
 fn clamp(x: &Tensor, min: f32, max: f32) -> Result<Tensor> {
+    if !x.device().is_cpu() {
+        return x.clamp(min, max);
+    }
     map(x, |data| {
         for v in data {
             *v = v.max(min).min(max);
@@ -45,6 +49,9 @@ fn clamp(x: &Tensor, min: f32, max: f32) -> Result<Tensor> {
 }
 
 fn silu(x: &Tensor) -> Result<Tensor> {
+    if !x.device().is_cpu() {
+        return candle_nn::ops::silu(x);
+    }
     map(x, |data| {
         torch_cpu::vectorized_loop(
             data,
@@ -90,6 +97,7 @@ impl ClippedLinear {
 struct SubsampleLayer {
     weight: Tensor,
     norm: Vec<f32>,
+    native_norm: Tensor,
     eps: f32,
 }
 
@@ -98,6 +106,7 @@ impl SubsampleLayer {
         Ok(Self {
             weight: vb.get((output, input, 3, 3), "conv.weight")?,
             norm: vb.get(output, "norm.weight")?.to_vec1::<f32>()?,
+            native_norm: vb.get(output, "norm.weight")?,
             eps,
         })
     }
@@ -105,6 +114,9 @@ impl SubsampleLayer {
     /// Input/output is `(channels, frames, frequency)`. Torch's slow CPU
     /// Conv2d uses contiguous im2col then `weight @ columns`.
     fn forward(&self, x: &Tensor, mask: &[bool]) -> Result<(Tensor, Vec<bool>)> {
+        if !x.device().is_cpu() {
+            return self.forward_native(x, mask);
+        }
         let (channels, time, freq) = x.dims3()?;
         let (ot, of) = (time.div_ceil(2), freq.div_ceil(2));
         let positions = ot * of;
@@ -140,6 +152,52 @@ impl SubsampleLayer {
             *v = v.max(0.0);
         }
         let y = Tensor::from_vec(rows, (positions, out_c), dev)?
+            .t()?
+            .contiguous()?
+            .reshape((out_c, ot, of))?;
+        Ok((y, mask.iter().step_by(2).copied().collect()))
+    }
+
+    /// Gather a stride-two im2col on device, then GEMM and channel `LayerNorm`.
+    /// Only the input validity mask originates on the host.
+    fn forward_native(&self, x: &Tensor, mask: &[bool]) -> Result<(Tensor, Vec<bool>)> {
+        let (channels, time, freq) = x.dims3()?;
+        let (ot, of) = (time.div_ceil(2), freq.div_ceil(2));
+        let positions = ot * of;
+        let validity: Vec<f32> = mask.iter().map(|&v| f32::from(v)).collect();
+        let x = x.broadcast_mul(&Tensor::from_vec(validity, (1, time, 1), x.device())?)?;
+        let padded = x.pad_with_zeros(1, 1, 1)?.pad_with_zeros(2, 1, 1)?;
+        let kernel = Tensor::arange(0_u32, 3_u32, x.device())?;
+        let stride = Tensor::new(2_u32, x.device())?;
+        let times = Tensor::arange(0_u32, ot as u32, x.device())?
+            .broadcast_mul(&stride)?
+            .reshape((1, 1, ot, 1))?
+            .broadcast_add(&kernel.reshape((3, 1, 1, 1))?)?
+            .broadcast_mul(&Tensor::new((freq + 2) as u32, x.device())?)?;
+        let freqs = Tensor::arange(0_u32, of as u32, x.device())?
+            .broadcast_mul(&stride)?
+            .reshape((1, 1, 1, of))?
+            .broadcast_add(&kernel.reshape((1, 3, 1, 1))?)?;
+        let indices = times.broadcast_add(&freqs)?.flatten_all()?;
+        let col = padded
+            .reshape((channels, (time + 2) * (freq + 2)))?
+            .index_select(&indices, 1)?
+            .reshape((channels * 9, positions))?;
+        let out_c = self.native_norm.dim(0)?;
+        let rows = self
+            .weight
+            .reshape((out_c, channels * 9))?
+            .matmul(&col)?
+            .t()?
+            .contiguous()?;
+        let centered = rows.broadcast_sub(&rows.mean_keepdim(D::Minus1)?)?;
+        let inv = (centered.sqr()?.mean_keepdim(D::Minus1)? + f64::from(self.eps))?
+            .sqrt()?
+            .recip()?;
+        let y = centered
+            .broadcast_mul(&inv)?
+            .broadcast_mul(&self.native_norm)?
+            .relu()?
             .t()?
             .contiguous()?
             .reshape((out_c, ot, of))?;
@@ -203,6 +261,9 @@ impl LightConv {
     }
 
     fn forward(&self, x: &Tensor) -> Result<Tensor> {
+        if !x.device().is_cpu() {
+            return self.forward_native(x);
+        }
         let (seq, h) = x.dims2()?;
         let y = self
             .start
@@ -217,10 +278,46 @@ impl LightConv {
         self.end.forward(&silu(&y)?)?.add(x)
     }
 
+    fn forward_native(&self, x: &Tensor) -> Result<Tensor> {
+        let h = x.dim(1)?;
+        let y = self
+            .start
+            .forward(&rms_norm(x, Some(&self.pre), self.eps)?)?;
+        let glu = y
+            .narrow(1, 0, h)?
+            .mul(&candle_nn::ops::sigmoid(&y.narrow(1, h, h)?)?)?;
+        let y = self.depthwise_native(&glu)?;
+        let y = self.depthwise_norm(&clamp(&y, -self.clip, self.clip)?)?;
+        self.end.forward(&silu(&y)?)?.add(x)
+    }
+
+    /// Causal im2col followed by one batched GEMM for all channels, avoiding
+    /// one convolution/GEMM launch per group. No activation leaves the device.
+    fn depthwise_native(&self, glu: &Tensor) -> Result<Tensor> {
+        let (seq, h) = glu.dims2()?;
+        let kernel = self.depthwise.dim(2)?;
+        let padded = glu.t()?.contiguous()?.pad_with_zeros(1, kernel - 1, 0)?;
+        let indices = Tensor::arange(0_u32, kernel as u32, glu.device())?
+            .reshape((kernel, 1))?
+            .broadcast_add(&Tensor::arange(0_u32, seq as u32, glu.device())?.reshape((1, seq))?)?
+            .flatten_all()?;
+        let col = padded
+            .index_select(&indices, 1)?
+            .reshape((h, kernel, seq))?;
+        self.depthwise
+            .matmul(&col)?
+            .reshape((h, seq))?
+            .t()?
+            .contiguous()
+    }
+
     /// `RMSNorm` receives a transposed `(channels, time)` convolution result
     /// in PyTorch. Its squared values retain channel-major strides, so the
     /// reduction uses the outer (column-wise) cascade, not `sum_row`.
     fn depthwise_norm(&self, x: &Tensor) -> Result<Tensor> {
+        if !x.device().is_cpu() {
+            return rms_norm(x, Some(&self.norm), self.eps);
+        }
         let (seq, h) = x.dims2()?;
         let mut data = x.flatten_all()?.to_vec1::<f32>()?;
         let mut squares = vec![0.0_f32; data.len()];
@@ -274,6 +371,87 @@ struct Attention {
     post: ClippedLinear,
     relative: Tensor,
     scale: Vec<f32>,
+    native_scale: Tensor,
+}
+
+/// Per-clip control tensors shared by every GPU attention layer.
+struct AttentionLayout {
+    context_indices: Tensor,
+    valid: Tensor,
+    seq: usize,
+    blocks: usize,
+    chunk: usize,
+    context: usize,
+}
+
+impl AttentionLayout {
+    fn new(mask: &[bool], c: &AudioConfig, dev: &Device) -> Result<Self> {
+        let seq = mask.len();
+        let chunk = c.attention_chunk_size;
+        let blocks = seq.div_ceil(chunk);
+        let past = c.attention_context_left - 1;
+        let context = chunk + past + c.attention_context_right;
+        // A sentinel row containing zeros represents both left and right pad.
+        let indices: Vec<u32> = (0..blocks)
+            .flat_map(|block| {
+                (0..context).map(move |at| {
+                    (block * chunk + at)
+                        .checked_sub(past)
+                        .filter(|&i| i < seq)
+                        .map_or(seq as u32, |i| i as u32)
+                })
+            })
+            .collect();
+        let valid: Vec<u8> = (0..blocks)
+            .flat_map(|block| {
+                (0..chunk).flat_map(move |row| {
+                    let qi = block * chunk + row;
+                    (0..context).map(move |at| {
+                        let ki = (block * chunk + at).checked_sub(past);
+                        u8::from(
+                            qi < seq
+                                && ki.is_some_and(|ki| {
+                                    ki < seq && mask[ki] && qi >= ki && qi - ki < past
+                                }),
+                        )
+                    })
+                })
+            })
+            .collect();
+        Ok(Self {
+            context_indices: Tensor::new(indices.as_slice(), dev)?,
+            valid: Tensor::from_vec(valid, (1, blocks, chunk, context), dev)?,
+            seq,
+            blocks,
+            chunk,
+            context,
+        })
+    }
+
+    fn blocked(&self, t: &Tensor, heads: usize, is_context: bool) -> Result<Tensor> {
+        let hidden = t.dim(1)?;
+        let width = if is_context { self.context } else { self.chunk };
+        let t = if is_context {
+            t.pad_with_zeros(0, 0, 1)?
+                .index_select(&self.context_indices, 0)?
+        } else {
+            t.pad_with_zeros(0, 0, self.blocks * self.chunk - self.seq)?
+        };
+        t.reshape((self.blocks, width, heads, hidden / heads))?
+            .permute((2, 0, 1, 3))?
+            .contiguous()
+    }
+
+    /// Match PyTorch's pad/flatten/truncate relative shift without host data.
+    fn relative_shift(&self, bd: &Tensor) -> Result<Tensor> {
+        let heads = bd.dim(0)?;
+        let plen = bd.dim(3)?;
+        bd.pad_with_zeros(3, 0, self.context + 1 - plen)?
+            .reshape((heads, self.blocks, self.chunk * (self.context + 1)))?
+            .narrow(2, 0, self.chunk * self.context)?
+            .contiguous()?
+            .reshape((heads, self.blocks, self.chunk, self.context))
+    }
 }
 
 impl Attention {
@@ -302,6 +480,8 @@ impl Attention {
             v: proj("v_proj")?,
             post: proj("post")?,
             relative: vb.get((h, h), "relative_k_proj.weight")?,
+            native_scale: Tensor::from_slice(&scale, (1, h / c.num_attention_heads), vb.device())?
+                .repeat((1, c.num_attention_heads))?,
             scale,
         })
     }
@@ -315,6 +495,9 @@ impl Attention {
         reason = "the scale reproduces Python math.log(1 + math.e), not log1p"
     )]
     fn forward(&self, x: &Tensor, pos: &Tensor, mask: &[bool], c: &AudioConfig) -> Result<Tensor> {
+        if !x.device().is_cpu() {
+            return self.forward_native(x, pos, &AttentionLayout::new(mask, c, x.device())?, c);
+        }
         let (seq, hidden) = x.dims2()?;
         let (nh, chunk) = (c.num_attention_heads, c.attention_chunk_size);
         let hd = hidden / nh;
@@ -413,6 +596,61 @@ impl Attention {
             .contiguous()?;
         self.post.forward(&out)
     }
+
+    #[expect(
+        clippy::imprecise_flops,
+        reason = "the scale reproduces Python math.log(1 + math.e), not log1p"
+    )]
+    fn forward_native(
+        &self,
+        x: &Tensor,
+        pos: &Tensor,
+        layout: &AttentionLayout,
+        c: &AudioConfig,
+    ) -> Result<Tensor> {
+        let hidden = x.dim(1)?;
+        let heads = c.num_attention_heads;
+        let hd = hidden / heads;
+        let q_scale = (hd as f64).powf(-0.5) / std::f64::consts::LN_2;
+        let k_scale = (1.0 + std::f64::consts::E).ln() / std::f64::consts::LN_2;
+        let query =
+            mul_scalar(&self.q.forward(x)?, q_scale as f32)?.broadcast_mul(&self.native_scale)?;
+        let query = layout.blocked(&query, heads, false)?;
+        let key = layout.blocked(
+            &mul_scalar(&self.k.forward(x)?, k_scale as f32)?,
+            heads,
+            true,
+        )?;
+        let value = layout.blocked(&self.v.forward(x)?, heads, true)?;
+        let ac = query.matmul(&key.transpose(2, 3)?)?;
+        let plen = pos.dim(0)?;
+        let relative = linear(pos, &self.relative)?
+            .reshape((plen, heads, hd))?
+            .permute((1, 2, 0))?
+            .contiguous()?;
+        let bd = query
+            .reshape((heads, layout.blocks * layout.chunk, hd))?
+            .matmul(&relative)?
+            .reshape((heads, layout.blocks, layout.chunk, plen))?;
+        let scores = ac.add(&layout.relative_shift(&bd)?)?;
+        let scores = scores
+            .broadcast_div(&Tensor::new(c.attention_logit_cap, x.device())?)?
+            .tanh()?;
+        let scores = mul_scalar(&scores, c.attention_logit_cap)?;
+        let invalid = Tensor::full(c.attention_invalid_logits_value, scores.shape(), x.device())?;
+        let scores = layout
+            .valid
+            .broadcast_as(scores.shape())?
+            .where_cond(&scores, &invalid)?;
+        let out = softmax_last_dim(&scores)?
+            .matmul(&value)?
+            .permute((1, 2, 0, 3))?
+            .contiguous()?
+            .reshape((layout.blocks * layout.chunk, hidden))?
+            .narrow(0, 0, layout.seq)?
+            .contiguous()?;
+        self.post.forward(&out)
+    }
 }
 
 struct Layer {
@@ -439,14 +677,25 @@ impl Layer {
         })
     }
 
-    fn forward(&self, x: &Tensor, pos: &Tensor, mask: &[bool], c: &AudioConfig) -> Result<Tensor> {
+    fn forward(
+        &self,
+        x: &Tensor,
+        pos: &Tensor,
+        mask: &[bool],
+        c: &AudioConfig,
+        layout: Option<&AttentionLayout>,
+    ) -> Result<Tensor> {
         let x = self.ff1.forward(x)?;
         let y = rms_norm(
             &clamp(&x, -c.gradient_clipping, c.gradient_clipping)?,
             Some(&self.pre),
             1e-6,
         )?;
-        let y = self.attn.forward(&y, pos, mask, c)?;
+        let y = if let Some(layout) = layout {
+            self.attn.forward_native(&y, pos, layout, c)?
+        } else {
+            self.attn.forward(&y, pos, mask, c)?
+        };
         let y = rms_norm(
             &clamp(&y, -c.gradient_clipping, c.gradient_clipping)?,
             Some(&self.post),
@@ -546,6 +795,9 @@ impl AudioModel {
     #[cfg(target_os = "macos")]
     fn project_output(&self, x: &Tensor) -> Result<Tensor> {
         use ndarray::{Array2, ArrayView2};
+        if !x.device().is_cpu() {
+            return linear(x, &self.output)?.broadcast_add(&self.bias);
+        }
         let (seq, input) = x.dims2()?;
         let output = self.bias.dim(0)?;
         let values = x.flatten_all()?.to_vec1::<f32>()?;
@@ -588,8 +840,13 @@ impl AudioModel {
         if let Some(h) = hidden.as_mut() {
             h.push(x.clone());
         }
+        let layout = if features.device().is_cpu() {
+            None
+        } else {
+            Some(AttentionLayout::new(&mask, &self.cfg, features.device())?)
+        };
         for layer in &self.layers {
-            x = layer.forward(&x, &self.positions, &mask, &self.cfg)?;
+            x = layer.forward(&x, &self.positions, &mask, &self.cfg, layout.as_ref())?;
             if let Some(h) = hidden.as_mut() {
                 h.push(x.clone());
             }
@@ -604,6 +861,11 @@ impl AudioModel {
             .enumerate()
             .filter_map(|(i, &v)| v.then_some(i as u32))
             .collect();
+        if !features.device().is_cpu() && indices.is_empty() {
+            // Metal cannot allocate an empty index buffer; retain a zero-length
+            // view of the existing device allocation instead.
+            return embed.narrow(0, 0, 0);
+        }
         embed.index_select(&Tensor::new(indices.as_slice(), features.device())?, 0)
     }
 }
@@ -611,6 +873,253 @@ impl AudioModel {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn fixture_tensor(shape: &[usize], dev: &Device) -> Tensor {
+        let values: Vec<f32> = (0..shape.iter().product())
+            .map(|i| (((i * 17 + 3) % 41) as f32 - 20.0) * 0.025)
+            .collect();
+        Tensor::from_vec(values, shape, dev).unwrap()
+    }
+
+    fn fixture_linear(
+        weights: &mut std::collections::HashMap<String, Tensor>,
+        prefix: &str,
+        input: usize,
+        output: usize,
+        dev: &Device,
+    ) {
+        weights.insert(
+            format!("{prefix}.linear.weight"),
+            fixture_tensor(&[output, input], dev),
+        );
+        for (name, value) in [
+            ("input_min", -0.7_f32),
+            ("input_max", 0.9),
+            ("output_min", -0.8),
+            ("output_max", 0.6),
+        ] {
+            weights.insert(format!("{prefix}.{name}"), Tensor::new(value, dev).unwrap());
+        }
+    }
+
+    #[expect(
+        clippy::too_many_lines,
+        reason = "synthetic checkpoint specifies all audio tower weights"
+    )]
+    fn fixture_model(dev: &Device) -> AudioModel {
+        let c = AudioConfig {
+            hidden_size: 8,
+            num_hidden_layers: 2,
+            num_attention_heads: 2,
+            hidden_act: "silu".into(),
+            subsampling_conv_channels: [128, 4],
+            conv_kernel_size: 5,
+            residual_weight: 0.5,
+            attention_chunk_size: 4,
+            attention_context_left: 6,
+            attention_context_right: 0,
+            attention_logit_cap: 3.0,
+            attention_invalid_logits_value: -1e9,
+            use_clipped_linears: true,
+            rms_norm_eps: 1e-6,
+            gradient_clipping: 0.75,
+            output_proj_dims: 6,
+        };
+        let mut weights = std::collections::HashMap::new();
+        let sub = "audio_tower.subsample_conv_projection";
+        for (i, input, output) in [(0, 1, 128), (1, 128, 4)] {
+            weights.insert(
+                format!("{sub}.layer{i}.conv.weight"),
+                fixture_tensor(&[output, input, 3, 3], dev),
+            );
+            weights.insert(
+                format!("{sub}.layer{i}.norm.weight"),
+                Tensor::ones(output, candle_core::DType::F32, dev).unwrap(),
+            );
+        }
+        weights.insert(
+            format!("{sub}.input_proj_linear.weight"),
+            fixture_tensor(&[8, 128], dev),
+        );
+        for i in 0..c.num_hidden_layers {
+            let layer = format!("audio_tower.layers.{i}");
+            for ff in ["feed_forward1", "feed_forward2"] {
+                fixture_linear(
+                    &mut weights,
+                    &format!("{layer}.{ff}.ffw_layer_1"),
+                    8,
+                    32,
+                    dev,
+                );
+                fixture_linear(
+                    &mut weights,
+                    &format!("{layer}.{ff}.ffw_layer_2"),
+                    32,
+                    8,
+                    dev,
+                );
+                for norm in ["pre_layer_norm", "post_layer_norm"] {
+                    weights.insert(
+                        format!("{layer}.{ff}.{norm}.weight"),
+                        Tensor::ones(8, candle_core::DType::F32, dev).unwrap(),
+                    );
+                }
+            }
+            for proj in ["q_proj", "k_proj", "v_proj", "post"] {
+                fixture_linear(
+                    &mut weights,
+                    &format!("{layer}.self_attn.{proj}"),
+                    8,
+                    8,
+                    dev,
+                );
+            }
+            weights.insert(
+                format!("{layer}.self_attn.relative_k_proj.weight"),
+                fixture_tensor(&[8, 8], dev),
+            );
+            weights.insert(
+                format!("{layer}.self_attn.per_dim_scale"),
+                fixture_tensor(&[4], dev),
+            );
+            fixture_linear(
+                &mut weights,
+                &format!("{layer}.lconv1d.linear_start"),
+                8,
+                16,
+                dev,
+            );
+            fixture_linear(
+                &mut weights,
+                &format!("{layer}.lconv1d.linear_end"),
+                8,
+                8,
+                dev,
+            );
+            weights.insert(
+                format!("{layer}.lconv1d.depthwise_conv1d.weight"),
+                fixture_tensor(&[8, 1, 5], dev),
+            );
+            for norm in [
+                "lconv1d.pre_layer_norm",
+                "lconv1d.conv_norm",
+                "norm_pre_attn",
+                "norm_post_attn",
+                "norm_out",
+            ] {
+                weights.insert(
+                    format!("{layer}.{norm}.weight"),
+                    Tensor::ones(8, candle_core::DType::F32, dev).unwrap(),
+                );
+            }
+        }
+        weights.insert(
+            "audio_tower.output_proj.weight".into(),
+            fixture_tensor(&[6, 8], dev),
+        );
+        weights.insert(
+            "audio_tower.output_proj.bias".into(),
+            fixture_tensor(&[6], dev),
+        );
+        weights.insert(
+            "embed_audio.embedding_projection.weight".into(),
+            fixture_tensor(&[10, 6], dev),
+        );
+        let vb = VarBuilder::from_tensors(weights, candle_core::DType::F32, dev);
+        AudioModel::load(&vb, &c, 10).unwrap()
+    }
+
+    fn assert_close(actual: &Tensor, expected: &Tensor, tolerance: f32) {
+        assert_eq!(actual.dims(), expected.dims());
+        let actual = actual.flatten_all().unwrap().to_vec1::<f32>().unwrap();
+        let expected = expected.flatten_all().unwrap().to_vec1::<f32>().unwrap();
+        for (i, (a, b)) in actual.iter().zip(&expected).enumerate() {
+            assert!(
+                (a - b).abs() <= tolerance,
+                "element {i}: {a} != {b} (tol {tolerance})"
+            );
+        }
+    }
+
+    #[test]
+    fn native_audio_stages_match_cpu() {
+        let dev = Device::Cpu;
+        let audio = fixture_model(&dev);
+        for seq in [1, 3, 4, 5, 9, 17] {
+            // Holes as well as trailing padding; odd subsampling geometries.
+            let mask: Vec<bool> = (0..seq).map(|i| i != 2 && i != seq - 1).collect();
+            let features = fixture_tensor(&[1, seq, 128], &dev);
+            let (cpu, next_mask) = audio.first.forward(&features, &mask).unwrap();
+            let (native, native_mask) = audio.first.forward_native(&features, &mask).unwrap();
+            assert_eq!(next_mask, native_mask);
+            assert_close(&native, &cpu, 2e-5);
+            let (cpu, _) = audio.second.forward(&cpu, &next_mask).unwrap();
+            let (native, _) = audio.second.forward_native(&native, &native_mask).unwrap();
+            assert_close(&native, &cpu, 3e-5);
+            let x = fixture_tensor(&[seq, 8], &dev);
+            let layer = &audio.layers[0];
+            let glu = x.flatten_all().unwrap().to_vec1::<f32>().unwrap();
+            assert_close(
+                &layer.conv.depthwise_native(&x).unwrap(),
+                &layer.conv.depthwise(&glu, seq, 8, &dev).unwrap(),
+                1e-6,
+            );
+            assert_close(
+                &layer.conv.forward_native(&x).unwrap(),
+                &layer.conv.forward(&x).unwrap(),
+                2e-6,
+            );
+            let layout = AttentionLayout::new(&mask, &audio.cfg, &dev).unwrap();
+            assert_close(
+                &layer
+                    .attn
+                    .forward_native(&x, &audio.positions, &layout, &audio.cfg)
+                    .unwrap(),
+                &layer
+                    .attn
+                    .forward(&x, &audio.positions, &mask, &audio.cfg)
+                    .unwrap(),
+                2e-6,
+            );
+        }
+    }
+
+    #[cfg(any(feature = "embeddinggemma2-metal", feature = "embeddinggemma2-cuda"))]
+    #[test]
+    #[ignore = "requires an enabled Metal or CUDA feature and a GPU"]
+    fn gpu_audio_synthetic_matches_cpu() {
+        let dev = crate::accel::embeddinggemma2_device();
+        assert!(!dev.is_cpu(), "GPU test must not silently fall back to CPU");
+        let gpu = fixture_model(&dev);
+        let cpu = fixture_model(&Device::Cpu);
+        for seq in [1, 15, 16, 17, 37, 65] {
+            let mask: Vec<bool> = (0..seq).map(|i| i != 2 && i != seq - 1).collect();
+            let features = fixture_tensor(&[seq, 128], &Device::Cpu);
+            let mut cpu_hidden = Vec::new();
+            let mut gpu_hidden = Vec::new();
+            let expected = cpu
+                .forward(&features, &mask, Some(&mut cpu_hidden))
+                .unwrap();
+            let actual = gpu
+                .forward(
+                    &features.to_device(&dev).unwrap(),
+                    &mask,
+                    Some(&mut gpu_hidden),
+                )
+                .unwrap();
+            assert_close(&actual, &expected, 3e-4);
+            for (actual, expected) in gpu_hidden.iter().zip(&cpu_hidden) {
+                assert_close(actual, expected, 3e-4);
+            }
+            // Production path without diagnostic snapshots must remain native too.
+            assert_close(
+                &gpu.forward(&features.to_device(&dev).unwrap(), &mask, None)
+                    .unwrap(),
+                &actual,
+                1e-6,
+            );
+        }
+    }
 
     #[test]
     #[ignore = "needs audio tower Python trace and checkpoint"]
