@@ -23,6 +23,10 @@ pub const fn execution_providers() -> Vec<ExecutionProviderDispatch> {
 }
 
 /// ONNX execution providers to register, highest priority first.
+///
+/// Set `VQTRS_ONNX_CPU_ONLY=1` (or `true`, case-insensitive) to register only
+/// the CPU provider, bypassing compiled ONNX acceleration providers. This does
+/// not change candle device selection. Unset/other values preserve the default.
 #[cfg(any(
     feature = "cuda",
     feature = "tensorrt",
@@ -31,6 +35,11 @@ pub const fn execution_providers() -> Vec<ExecutionProviderDispatch> {
 ))]
 #[must_use]
 pub fn execution_providers() -> Vec<ExecutionProviderDispatch> {
+    if std::env::var("VQTRS_ONNX_CPU_ONLY")
+        .is_ok_and(|value| value == "1" || value.eq_ignore_ascii_case("true"))
+    {
+        return Vec::from([ort::execution_providers::CPUExecutionProvider::default().build()]);
+    }
     Vec::from([
         #[cfg(feature = "cuda")]
         ort::execution_providers::CUDAExecutionProvider::default().build(),
@@ -97,4 +106,69 @@ pub fn embeddinggemma2_device() -> candle_core::Device {
         return device;
     }
     candle_core::Device::Cpu
+}
+
+#[cfg(test)]
+#[cfg(any(
+    feature = "cuda",
+    feature = "tensorrt",
+    feature = "coreml",
+    feature = "directml"
+))]
+mod tests {
+    use std::process::Command;
+
+    #[test]
+    #[ignore = "subprocess provider probe; invoked by the environment regression tests"]
+    fn provider_probe() {
+        println!("provider_probe={:?}", super::execution_providers());
+    }
+
+    fn probe(value: Option<&str>) -> anyhow::Result<String> {
+        let mut command = Command::new(std::env::current_exe()?);
+        command.args([
+            "--exact",
+            "accel::tests::provider_probe",
+            "--ignored",
+            "--nocapture",
+        ]);
+        command.env_remove("VQTRS_ONNX_CPU_ONLY");
+        if let Some(value) = value {
+            command.env("VQTRS_ONNX_CPU_ONLY", value);
+        }
+        let output = command.output()?;
+        anyhow::ensure!(
+            output.status.success(),
+            "provider probe exited unsuccessfully"
+        );
+        Ok(String::from_utf8(output.stdout)?)
+    }
+
+    #[test]
+    fn cpu_override_registers_only_cpu() -> anyhow::Result<()> {
+        for value in ["1", "true", "TRUE"] {
+            let output = probe(Some(value))?;
+            anyhow::ensure!(
+                output.contains("provider_probe=[CPUExecutionProvider"),
+                "{output}"
+            );
+            anyhow::ensure!(!output.contains("CoreMLExecutionProvider"), "{output}");
+            anyhow::ensure!(!output.contains("CUDAExecutionProvider"), "{output}");
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn unset_or_false_preserves_acceleration() -> anyhow::Result<()> {
+        for value in [None, Some("0"), Some("false")] {
+            let output = probe(value)?;
+            anyhow::ensure!(
+                !output.contains("provider_probe=[CPUExecutionProvider"),
+                "{output}"
+            );
+            #[cfg(feature = "coreml")]
+            anyhow::ensure!(output.contains("CoreMLExecutionProvider"), "{output}");
+        }
+        Ok(())
+    }
 }

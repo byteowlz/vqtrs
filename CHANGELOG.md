@@ -6,6 +6,11 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
+- `VQTRS_ONNX_CPU_ONLY=1` explicitly bypasses compiled ONNX GPU providers and
+  selects CPU for dense/sparse/M3/reranking. It offers a workaround for noisy
+  macOS CoreML execution without hiding diagnostics or disabling Candle
+  Qwen3/EmbeddingGemma Metal/CUDA. Defaults are unchanged; subprocess regression
+  tests verify selection without mutating global process environment.
 - `just install-all` now includes EmbeddingGemma 2 by default, with an explicit
   opt-out and CPU/CUDA/Metal features selected independently of Qwen3. Both
   binaries install with `--locked`. Shared candle CUDA compatibility handling

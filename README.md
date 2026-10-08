@@ -238,6 +238,30 @@ composes these.
 > yet — the interactive installer keeps ONNX on the GPU and enabled candle
 > backends on CPU (`cuda,qwen3,embeddinggemma2` when both are included).
 
+### Noisy macOS CoreML execution
+
+Some macOS ONNX/CoreML runs emit the native diagnostic
+`Context leak detected, msgtracer returned -1`. It is not chat/prompt context
+leakage, and the message alone does not establish a process memory leak or the
+cause of an HTTP error. Avoid that execution path explicitly:
+
+```bash
+VQTRS_ONNX_CPU_ONLY=1 vqtrs service run --port 3010 --host 0.0.0.0
+# Also works for in-process CLI inference:
+VQTRS_ONNX_CPU_ONLY=1 vqtrs embed --no-daemon "a synthetic test sentence"
+```
+
+The variable is read when an ONNX model is constructed; restart an already-running
+server to change it. `1` or case-insensitive `true` registers only the CPU provider
+for dense/sparse/M3/reranking, even in a GPU-enabled build. It does **not** disable
+Qwen3 or EmbeddingGemma Metal/CUDA. Unset it to retain compiled ONNX acceleration.
+Changing providers can change floating-point vectors; do not mix provider modes
+in an existing embedding index without checking consistency/re-embedding.
+This is a provider-selection workaround, not stderr filtering or a patch to Apple
+frameworks; confirm warning avoidance on the affected machine. HTTP 500 responses
+still need their JSON error diagnosed separately. Install current `main` first;
+the original `v0.2.0` tag predates this option.
+
 ## Workspace layout
 
 ```
