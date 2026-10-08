@@ -11,7 +11,7 @@ install:
     cargo install --path crates/vqtrs-cli --force
     cargo install --path crates/vqtrs-api --force
 
-# Interactive install with hardware acceleration selection
+# Interactive acceleration + Qwen3 selection; EmbeddingGemma 2 defaults to enabled
 install-all:
     ./scripts/install-vqtrs.sh
 
@@ -84,8 +84,12 @@ clean:
 
 # === Testing ===
 
+# Offline installer feature-selection tests (mock cargo/host/toolkit)
+test-installer:
+    bash scripts/test-install-vqtrs.sh
+
 # Run all tests
-test:
+test: test-installer
     cargo test --workspace
 
 # Run tests for a specific crate

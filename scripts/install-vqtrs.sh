@@ -2,8 +2,8 @@
 set -euo pipefail
 
 # Interactive installer for vqtrs (the `vqtrs` CLI + `vqtrs-api` server).
-# Detects the host, lets you pick GPU acceleration and whether to include the
-# (heavier) Qwen3 candle backend, then `cargo install`s both binaries.
+# Detects the host, selects acceleration and optional candle backends, then
+# installs both binaries from the lockfile. EmbeddingGemma 2 defaults to enabled.
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
@@ -41,48 +41,68 @@ QWEN3="${QWEN3:-n}"
 WANT_QWEN3=false
 [[ "$QWEN3" =~ ^[Yy]$ ]] && WANT_QWEN3=true
 
+# --- EmbeddingGemma 2 backend ---------------------------------------------------
+echo
+echo "Include EmbeddingGemma 2 (text, image, audio and video embeddings)?"
+echo "It adds candle. Video containers also require ffmpeg and ffprobe at runtime."
+read -rp "Include EmbeddingGemma 2? [Y/n]: " GEMMA2
+GEMMA2="${GEMMA2:-y}"
+WANT_GEMMA2=false
+[[ "$GEMMA2" =~ ^[Yy]$ ]] && WANT_GEMMA2=true
+
 # --- compose feature string ----------------------------------------------------
 FEATURES=""
+CANDLE_SUFFIX=""
 case "$ACCEL" in
-  1)
-    $WANT_QWEN3 && FEATURES="qwen3"
-    ;;
+  1) ;;
   2)
     FEATURES="cuda"
-    if $WANT_QWEN3; then
-      FEATURES="cuda,qwen3-cuda"
-      # cudarc 0.19.7 (pinned via fastembed → candle) knows CUDA up to 13.2.
-      # Newer 13.x toolkits share the same library ABI, so pin its bindings to
-      # 13.2; CUDA 14+ isn't covered, so run Qwen3 on CPU there.
-      CUDA_VER="$(nvcc --version 2>/dev/null | grep -oE 'release [0-9]+\.[0-9]+' | grep -oE '[0-9]+\.[0-9]+' | head -1)"
-      CUDA_MAJOR="${CUDA_VER%%.*}"
-      CUDA_MINOR="${CUDA_VER##*.}"
-      if [[ "$CUDA_MAJOR" == "13" && "${CUDA_MINOR:-0}" -gt 2 ]]; then
-        echo "CUDA ${CUDA_VER}: pinning CUDARC_CUDA_VERSION=13020 (13.2 bindings, ABI-compatible)."
-        export CUDARC_CUDA_VERSION=13020
-      elif [[ -n "$CUDA_MAJOR" && "$CUDA_MAJOR" -ge 14 ]]; then
-        echo "CUDA ${CUDA_VER} is newer than cudarc supports — Qwen3 on CPU (ONNX still on GPU)."
-        FEATURES="cuda,qwen3"
+    CANDLE_SUFFIX="-cuda"
+    if $WANT_QWEN3 || $WANT_GEMMA2; then
+      # Both candle backends use cudarc 0.19.7, which knows CUDA up to 13.2.
+      # Retain the 13.x binding pin; CUDA 14+ uses CPU candle backends.
+      CUDA_OUTPUT="$(nvcc --version 2>/dev/null || true)"
+      if [[ "$CUDA_OUTPUT" =~ release[[:space:]]([0-9]+)\.([0-9]+) ]]; then
+        CUDA_MAJOR="${BASH_REMATCH[1]}"
+        CUDA_MINOR="${BASH_REMATCH[2]}"
+        CUDA_VER="${CUDA_MAJOR}.${CUDA_MINOR}"
+        if [[ "$CUDA_MAJOR" == "13" && "$CUDA_MINOR" -gt 2 ]]; then
+          echo "CUDA ${CUDA_VER}: pinning CUDARC_CUDA_VERSION=13020 (13.2 bindings, ABI-compatible)."
+          export CUDARC_CUDA_VERSION=13020
+        elif [[ "$CUDA_MAJOR" -ge 14 ]]; then
+          echo "CUDA ${CUDA_VER} is newer than cudarc supports — candle backends on CPU (ONNX still on GPU)."
+          CANDLE_SUFFIX=""
+        fi
+      else
+        echo "Warning: CUDA toolkit version unavailable; candle CUDA builds require nvcc."
       fi
     fi
     ;;
   3)
     if [[ "$OS" != "Darwin" ]]; then
       echo "Warning: CoreML/Metal are macOS-only; falling back to CPU."
-      $WANT_QWEN3 && FEATURES="qwen3"
     else
       FEATURES="coreml"
-      $WANT_QWEN3 && FEATURES="coreml,qwen3-metal"
+      CANDLE_SUFFIX="-metal"
     fi
     ;;
   *)
     echo "Invalid choice; using CPU only."
-    $WANT_QWEN3 && FEATURES="qwen3"
     ;;
 esac
 
-FEATURE_ARGS=()
-[[ -n "$FEATURES" ]] && FEATURE_ARGS=(--features "$FEATURES")
+if $WANT_QWEN3; then
+  FEATURES="${FEATURES:+${FEATURES},}qwen3${CANDLE_SUFFIX}"
+fi
+if $WANT_GEMMA2; then
+  FEATURES="${FEATURES:+${FEATURES},}embeddinggemma2${CANDLE_SUFFIX}"
+fi
+
+# Keep the array nonempty for macOS's stock Bash 3.2 with nounset enabled.
+FEATURE_ARGS=(--locked)
+if [[ -n "$FEATURES" ]]; then
+  FEATURE_ARGS+=(--features "$FEATURES")
+fi
 
 echo
 echo "Installing with features: ${FEATURES:-<none, CPU/ONNX>}"

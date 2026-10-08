@@ -29,13 +29,21 @@ Install the `vqtrs` CLI + `vqtrs-api` server:
 
 ```bash
 just install          # CPU / ONNX only
-just install-all      # interactive: detects host, picks GPU + Qwen3
+just install-all      # interactive: GPU + optional Qwen3 + Gemma 2 (default yes)
 just install-cuda     # NVIDIA: ONNX + Qwen3 on GPU (CUDA <= 13.2)
 just install-cuda13   # NVIDIA: same, for CUDA 13.3+
 just install-mac      # Apple Silicon: ONNX CoreML + Qwen3 Metal
 just install-mac-eg2  # CoreML + Qwen3 Metal + multimodal EmbeddingGemma Metal
 just install-eg2      # CPU EmbeddingGemma 2: text, images, 16 kHz WAV, video
 ```
+
+`install-all` enables EmbeddingGemma 2 by default (`[Y/n]`) in **both** binaries,
+using Metal on Apple, CUDA on NVIDIA, or CPU without acceleration. Qwen3 remains
+optional; on Apple with Qwen3 enabled the features are
+`coreml,qwen3-metal,embeddinggemma2-metal`. Answer `n` to both backend prompts for
+an ONNX-only install. Installs use `--locked`; model weights download on first
+use, not during installation. Video containers require `ffmpeg` and `ffprobe`.
+`just install` and default Cargo builds remain ONNX-only.
 
 ### CLI
 
@@ -206,18 +214,18 @@ with `--features qwen3`.
 | `embeddinggemma2-cuda` | EmbeddingGemma 2 (candle CUDA, f32) | NVIDIA |
 | `embeddinggemma2-metal` | EmbeddingGemma 2 (candle Metal, f32) | macOS |
 
-ONNX accel and Qwen3 accel are independent, so the installer composes them per
-host:
+ONNX, Qwen3 and EmbeddingGemma 2 acceleration are independent, so the installer
+composes them per host:
 
 ```bash
-# NVIDIA, both backends on GPU
-cargo install --path crates/vqtrs-cli --features cuda,qwen3-cuda
-# Apple Silicon, both backends on GPU
-cargo install --path crates/vqtrs-cli --features coreml,qwen3-metal
+# NVIDIA, all three backends on GPU
+cargo install --path crates/vqtrs-cli --locked --features cuda,qwen3-cuda,embeddinggemma2-cuda
+# Apple Silicon, all three backends on GPU
+cargo install --path crates/vqtrs-cli --locked --features coreml,qwen3-metal,embeddinggemma2-metal
 ```
 
-The candle features (`qwen3-*`) compile GPU kernels directly (need the CUDA
-toolkit / macOS at build time). The ort ONNX features register an execution
+The candle features (`qwen3-*`, `embeddinggemma2-*`) compile GPU kernels directly
+(need the CUDA toolkit / macOS at build time). The ort ONNX features register an execution
 provider that needs a matching GPU-enabled `onnxruntime` at runtime and falls
 back to CPU if it isn't present. `just install-all` auto-detects the host and
 composes these.
@@ -226,8 +234,9 @@ composes these.
 > 13.3 by version string only. Since all 13.x share one library ABI, pin its
 > bindings to 13.2 and it builds + runs fine on a 13.3 toolkit:
 > `CUDARC_CUDA_VERSION=13020 just install-cuda13` (or `just install-all`, which
-> sets it automatically). CUDA 14+ isn't covered yet — there `cuda,qwen3` keeps
-> ONNX on the GPU with Qwen3 on CPU.
+> sets it automatically for either candle backend). CUDA 14+ isn't covered
+> yet — the interactive installer keeps ONNX on the GPU and enabled candle
+> backends on CPU (`cuda,qwen3,embeddinggemma2` when both are included).
 
 ## Workspace layout
 

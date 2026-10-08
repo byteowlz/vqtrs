@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+### Fixed
+
+- `just install-all` now includes EmbeddingGemma 2 by default, with an explicit
+  opt-out and CPU/CUDA/Metal features selected independently of Qwen3. Both
+  binaries install with `--locked`. Shared candle CUDA compatibility handling
+  also applies when only Gemma is selected. ONNX-only CPU installs no longer
+  exit early under `set -e` or macOS Bash 3.2's empty-array `nounset` behavior.
+  Offline installer regression tests run through `just test-installer` and
+  `just test`; default Cargo builds and `just install` remain ONNX-only.
+
 ## [0.2.0] - 2026-10-07
 
 ### Added
