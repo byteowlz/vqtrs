@@ -1,0 +1,720 @@
+{
+  "schema": "vqtrs-apple-text-probe-v1",
+  "status": "preliminary, not backend qualification",
+  "date": "2026-10-09",
+  "hardware": {
+    "chip": "Apple M2 Ultra",
+    "host_memory_gib": 192,
+    "os": "26.6.2"
+  },
+  "fixture_sha256": "ddc81d848622dcedb109b73a80d7f1a75c799345d150599b688c5e210a53f2c5",
+  "protocol": {
+    "warmups": 3,
+    "trials": 5,
+    "order": [
+      "candle-cpu",
+      "candle-metal",
+      "mlx-bf16"
+    ],
+    "interleaved": false,
+    "dimensions": 768,
+    "max_tokens": 463,
+    "actual_rows_per_trial": 55,
+    "inference_cache": false,
+    "background": "one existing large MLX service remained running; no co-resident contention qualification"
+  },
+  "arms": {
+    "candle-cpu": {
+      "dimensions": 768,
+      "inference_cache": false,
+      "load_ms": 1059.578541,
+      "runtime": "candle-cpu-f32",
+      "timing": "prepared text -> tokenization + sequential inference + synchronized host copy",
+      "trials": 5,
+      "warmups": 3,
+      "memory": {
+        "sampled_peak_owned_footprint_gib": 4.646290123462677,
+        "stopped": null,
+        "exit": 0,
+        "limitations": "1s sampling, not an allocation ceiling; excludes system CoreML compiler daemons"
+      },
+      "cases": [
+        {
+          "id": "query-1",
+          "rows": 1,
+          "token_lengths": [
+            16
+          ],
+          "ms": [
+            61.863541,
+            62.980667000000004,
+            60.817291000000004,
+            61.696833,
+            62.885042
+          ],
+          "mean_ms": 62.0486748,
+          "median_ms": 61.863541,
+          "actual_rows_per_second": 16.116379652317733,
+          "max_abs_vs_cpu": 0,
+          "min_cosine_vs_cpu": 1,
+          "max_unit_norm_error": 1.6254546597593844e-9
+        },
+        {
+          "id": "query-8",
+          "rows": 8,
+          "token_lengths": [
+            16,
+            16,
+            16,
+            16,
+            16,
+            16,
+            16,
+            16
+          ],
+          "ms": [
+            486.90375,
+            472.222958,
+            471.6875,
+            472.55475,
+            470.872208
+          ],
+          "mean_ms": 474.8482332,
+          "median_ms": 472.222958,
+          "actual_rows_per_second": 16.847488188148112,
+          "max_abs_vs_cpu": 0,
+          "min_cosine_vs_cpu": 1,
+          "max_unit_norm_error": 9.029228820178758e-8
+        },
+        {
+          "id": "docs-8",
+          "rows": 8,
+          "token_lengths": [
+            28,
+            33,
+            25,
+            22,
+            25,
+            25,
+            26,
+            29
+          ],
+          "ms": [
+            583.789166,
+            583.522334,
+            583.207209,
+            585.865,
+            614.019708
+          ],
+          "mean_ms": 590.0806833999999,
+          "median_ms": 583.789166,
+          "actual_rows_per_second": 13.557468029464395,
+          "max_abs_vs_cpu": 0,
+          "min_cosine_vs_cpu": 0.9999999999999998,
+          "max_unit_norm_error": 1.080807936482131e-7
+        },
+        {
+          "id": "queries-4",
+          "rows": 4,
+          "token_lengths": [
+            16,
+            16,
+            16,
+            16
+          ],
+          "ms": [
+            247.731125,
+            238.992458,
+            239.468292,
+            237.59633399999998,
+            236.451209
+          ],
+          "mean_ms": 240.04788359999998,
+          "median_ms": 238.992458,
+          "actual_rows_per_second": 16.66334207997158,
+          "max_abs_vs_cpu": 0,
+          "min_cosine_vs_cpu": 1,
+          "max_unit_norm_error": 9.029228820178758e-8
+        },
+        {
+          "id": "text-medium",
+          "rows": 1,
+          "token_lengths": [
+            120
+          ],
+          "ms": [
+            203.869584,
+            203.359958,
+            203.433,
+            203.879333,
+            203.61599999999999
+          ],
+          "mean_ms": 203.631575,
+          "median_ms": 203.61599999999999,
+          "actual_rows_per_second": 4.9108297669455245,
+          "max_abs_vs_cpu": 0,
+          "min_cosine_vs_cpu": 1,
+          "max_unit_norm_error": 5.1684764912351966e-8
+        },
+        {
+          "id": "text-near-cap",
+          "rows": 1,
+          "token_lengths": [
+            463
+          ],
+          "ms": [
+            796.853916,
+            793.040208,
+            793.155708,
+            760.766625,
+            756.411875
+          ],
+          "mean_ms": 780.0456664,
+          "median_ms": 793.040208,
+          "actual_rows_per_second": 1.2819762266164678,
+          "max_abs_vs_cpu": 0,
+          "min_cosine_vs_cpu": 1,
+          "max_unit_norm_error": 1.2192261689136785e-7
+        },
+        {
+          "id": "bulk-32",
+          "rows": 32,
+          "token_lengths": [
+            33,
+            38,
+            30,
+            27,
+            30,
+            30,
+            31,
+            34,
+            33,
+            38,
+            30,
+            27,
+            30,
+            30,
+            31,
+            34,
+            33,
+            38,
+            30,
+            27,
+            30,
+            30,
+            31,
+            34,
+            33,
+            38,
+            30,
+            27,
+            30,
+            30,
+            31,
+            34
+          ],
+          "ms": [
+            2580.9695,
+            2677.653792,
+            2579.755417,
+            2551.595084,
+            2556.086834
+          ],
+          "mean_ms": 2589.2121254000003,
+          "median_ms": 2579.755417,
+          "actual_rows_per_second": 12.358971938251837,
+          "max_abs_vs_cpu": 0,
+          "min_cosine_vs_cpu": 0.9999999999999998,
+          "max_unit_norm_error": 1.8579129701379316e-7
+        }
+      ],
+      "synthetic_retrieval": {
+        "relevant_ranks": [
+          1,
+          1,
+          1,
+          1
+        ],
+        "mrr": 1,
+        "recall_at3": 1,
+        "not_general_quality_evidence": true
+      }
+    },
+    "candle-metal": {
+      "dimensions": 768,
+      "inference_cache": false,
+      "load_ms": 1112.3955,
+      "runtime": "candle-metal-f32",
+      "timing": "prepared text -> tokenization + sequential inference + synchronized host copy",
+      "trials": 5,
+      "warmups": 3,
+      "memory": {
+        "sampled_peak_owned_footprint_gib": 4.80517765879631,
+        "stopped": null,
+        "exit": 0,
+        "limitations": "1s sampling, not an allocation ceiling; excludes system CoreML compiler daemons"
+      },
+      "cases": [
+        {
+          "id": "query-1",
+          "rows": 1,
+          "token_lengths": [
+            16
+          ],
+          "ms": [
+            36.387707999999996,
+            33.461417,
+            35.231,
+            33.372875,
+            33.129042
+          ],
+          "mean_ms": 34.31640839999999,
+          "median_ms": 33.461417,
+          "actual_rows_per_second": 29.14057870928008,
+          "max_abs_vs_cpu": 9.621726348996162e-8,
+          "min_cosine_vs_cpu": 0.9999999999997122,
+          "max_unit_norm_error": 2.4672015541682413e-8
+        },
+        {
+          "id": "query-8",
+          "rows": 8,
+          "token_lengths": [
+            16,
+            16,
+            16,
+            16,
+            16,
+            16,
+            16,
+            16
+          ],
+          "ms": [
+            241.677416,
+            245.89087500000002,
+            246.037333,
+            245.879833,
+            248.828292
+          ],
+          "mean_ms": 245.66274979999997,
+          "median_ms": 245.89087500000002,
+          "actual_rows_per_second": 32.56496968511911,
+          "max_abs_vs_cpu": 1.1920928955078125e-7,
+          "min_cosine_vs_cpu": 0.9999999999995608,
+          "max_unit_norm_error": 1.0157401186816628e-7
+        },
+        {
+          "id": "docs-8",
+          "rows": 8,
+          "token_lengths": [
+            28,
+            33,
+            25,
+            22,
+            25,
+            25,
+            26,
+            29
+          ],
+          "ms": [
+            257.184167,
+            257.057375,
+            253.75945900000002,
+            255.809792,
+            257.58750000000003
+          ],
+          "mean_ms": 256.2796586,
+          "median_ms": 257.057375,
+          "actual_rows_per_second": 31.215899239534885,
+          "max_abs_vs_cpu": 1.5459954738616943e-7,
+          "min_cosine_vs_cpu": 0.9999999999990188,
+          "max_unit_norm_error": 5.4170903762695843e-8
+        },
+        {
+          "id": "queries-4",
+          "rows": 4,
+          "token_lengths": [
+            16,
+            16,
+            16,
+            16
+          ],
+          "ms": [
+            123.009542,
+            123.014,
+            122.586375,
+            122.85020800000001,
+            123.309375
+          ],
+          "mean_ms": 122.9539,
+          "median_ms": 123.009542,
+          "actual_rows_per_second": 32.532518285308555,
+          "max_abs_vs_cpu": 1.1920928955078125e-7,
+          "min_cosine_vs_cpu": 0.9999999999995608,
+          "max_unit_norm_error": 1.0157401186816628e-7
+        },
+        {
+          "id": "text-medium",
+          "rows": 1,
+          "token_lengths": [
+            120
+          ],
+          "ms": [
+            34.762291,
+            34.993916999999996,
+            34.673375,
+            35.815167,
+            34.819833
+          ],
+          "mean_ms": 35.0129166,
+          "median_ms": 34.819833,
+          "actual_rows_per_second": 28.560888298006002,
+          "max_abs_vs_cpu": 1.4901161193847656e-7,
+          "min_cosine_vs_cpu": 0.9999999999994305,
+          "max_unit_norm_error": 3.3434034873991436e-8
+        },
+        {
+          "id": "text-near-cap",
+          "rows": 1,
+          "token_lengths": [
+            463
+          ],
+          "ms": [
+            65.79608300000001,
+            62.115334000000004,
+            64.80075000000001,
+            61.857124999999996,
+            62.41625
+          ],
+          "mean_ms": 63.3971084,
+          "median_ms": 62.41625,
+          "actual_rows_per_second": 15.773590077493187,
+          "max_abs_vs_cpu": 1.1548399925231934e-7,
+          "min_cosine_vs_cpu": 0.9999999999995728,
+          "max_unit_norm_error": 5.081215503910386e-8
+        },
+        {
+          "id": "bulk-32",
+          "rows": 32,
+          "token_lengths": [
+            33,
+            38,
+            30,
+            27,
+            30,
+            30,
+            31,
+            34,
+            33,
+            38,
+            30,
+            27,
+            30,
+            30,
+            31,
+            34,
+            33,
+            38,
+            30,
+            27,
+            30,
+            30,
+            31,
+            34,
+            33,
+            38,
+            30,
+            27,
+            30,
+            30,
+            31,
+            34
+          ],
+          "ms": [
+            1004.033333,
+            1001.941875,
+            1004.584,
+            1010.5634590000001,
+            1006.790708
+          ],
+          "mean_ms": 1005.582675,
+          "median_ms": 1004.584,
+          "actual_rows_per_second": 31.82234618351992,
+          "max_abs_vs_cpu": 1.8533319234848022e-7,
+          "min_cosine_vs_cpu": 0.9999999999991431,
+          "max_unit_norm_error": 1.1756439510790528e-7
+        }
+      ],
+      "synthetic_retrieval": {
+        "relevant_ranks": [
+          1,
+          1,
+          1,
+          1
+        ],
+        "mrr": 1,
+        "recall_at3": 1,
+        "not_general_quality_evidence": true
+      }
+    },
+    "mlx-bf16": {
+      "runtime": "mlx-turbo-bf16-edge",
+      "conversion_ms": 179.221042082645,
+      "load_ms": 553.3831670181826,
+      "dimensions": 768,
+      "warmups": 3,
+      "trials": 5,
+      "inference_cache": false,
+      "timing": "prepared text -> tokenization + length-sorted padded batches + synchronized host copy",
+      "mlx_peak_allocator_bytes": 330720553,
+      "memory": {
+        "sampled_peak_owned_footprint_gib": 0.5714737996459007,
+        "stopped": null,
+        "exit": 0,
+        "limitations": "1s sampling, not an allocation ceiling; excludes system CoreML compiler daemons"
+      },
+      "cases": [
+        {
+          "id": "query-1",
+          "rows": 1,
+          "token_lengths": [
+            16
+          ],
+          "ms": [
+            21.68737491592765,
+            21.91387501079589,
+            24.239624966867268,
+            22.285541985183954,
+            22.45895902160555
+          ],
+          "mean_ms": 22.517075180076063,
+          "median_ms": 22.285541985183954,
+          "actual_rows_per_second": 44.41074127091057,
+          "max_abs_vs_cpu": 0.0007914155721664429,
+          "min_cosine_vs_cpu": 0.9999769639883797,
+          "max_unit_norm_error": 3.184452634918955e-8
+        },
+        {
+          "id": "query-8",
+          "rows": 8,
+          "token_lengths": [
+            16,
+            16,
+            16,
+            16,
+            16,
+            16,
+            16,
+            16
+          ],
+          "ms": [
+            24.374499917030334,
+            26.97508397977799,
+            24.335124995559454,
+            26.080459007062018,
+            25.638084043748677
+          ],
+          "mean_ms": 25.480650388635695,
+          "median_ms": 25.638084043748677,
+          "actual_rows_per_second": 313.96372847562714,
+          "max_abs_vs_cpu": 0.0015579760074615479,
+          "min_cosine_vs_cpu": 0.9999449727689378,
+          "max_unit_norm_error": 6.612329839228437e-8
+        },
+        {
+          "id": "docs-8",
+          "rows": 8,
+          "token_lengths": [
+            28,
+            33,
+            25,
+            22,
+            25,
+            25,
+            26,
+            29
+          ],
+          "ms": [
+            51.83787504211068,
+            51.6187499742955,
+            53.07866702787578,
+            47.66433406621218,
+            49.466833006590605
+          ],
+          "mean_ms": 50.73329182341695,
+          "median_ms": 51.6187499742955,
+          "actual_rows_per_second": 157.68738263318136,
+          "max_abs_vs_cpu": 0.0017911531031131744,
+          "min_cosine_vs_cpu": 0.9999286823141862,
+          "max_unit_norm_error": 5.6367958300995724e-8
+        },
+        {
+          "id": "queries-4",
+          "rows": 4,
+          "token_lengths": [
+            16,
+            16,
+            16,
+            16
+          ],
+          "ms": [
+            22.75266603101045,
+            21.92199998535216,
+            23.201041971333325,
+            25.854833074845374,
+            23.186375037766993
+          ],
+          "mean_ms": 23.38338322006166,
+          "median_ms": 23.186375037766993,
+          "actual_rows_per_second": 171.06164503040003,
+          "max_abs_vs_cpu": 0.001379646360874176,
+          "min_cosine_vs_cpu": 0.9999568508238404,
+          "max_unit_norm_error": 1.662671922364467e-8
+        },
+        {
+          "id": "text-medium",
+          "rows": 1,
+          "token_lengths": [
+            120
+          ],
+          "ms": [
+            27.84400002565235,
+            27.98895805608481,
+            25.164499995298684,
+            27.05633407458663,
+            28.866708045825362
+          ],
+          "mean_ms": 27.384100039489567,
+          "median_ms": 27.84400002565235,
+          "actual_rows_per_second": 36.517541148255305,
+          "max_abs_vs_cpu": 0.001162651926279068,
+          "min_cosine_vs_cpu": 0.9999569635715598,
+          "max_unit_norm_error": 3.0202197298656586e-8
+        },
+        {
+          "id": "text-near-cap",
+          "rows": 1,
+          "token_lengths": [
+            463
+          ],
+          "ms": [
+            40.24579108227044,
+            37.20870800316334,
+            39.34820799622685,
+            36.194249987602234,
+            38.82625000551343
+          ],
+          "mean_ms": 38.36464141495526,
+          "median_ms": 38.82625000551343,
+          "actual_rows_per_second": 26.065667842008846,
+          "max_abs_vs_cpu": 0.0009326143190264702,
+          "min_cosine_vs_cpu": 0.9999617657388953,
+          "max_unit_norm_error": 3.815678240037812e-8
+        },
+        {
+          "id": "bulk-32",
+          "rows": 32,
+          "token_lengths": [
+            33,
+            38,
+            30,
+            27,
+            30,
+            30,
+            31,
+            34,
+            33,
+            38,
+            30,
+            27,
+            30,
+            30,
+            31,
+            34,
+            33,
+            38,
+            30,
+            27,
+            30,
+            30,
+            31,
+            34,
+            33,
+            38,
+            30,
+            27,
+            30,
+            30,
+            31,
+            34
+          ],
+          "ms": [
+            75.3890840569511,
+            74.58133297041059,
+            74.39562503714114,
+            75.08041698019952,
+            73.38187505956739
+          ],
+          "mean_ms": 74.56566682085395,
+          "median_ms": 74.58133297041059,
+          "actual_rows_per_second": 429.1519323079464,
+          "max_abs_vs_cpu": 0.0013866610825061798,
+          "min_cosine_vs_cpu": 0.9999466948350128,
+          "max_unit_norm_error": 6.664010199219916e-8
+        }
+      ],
+      "synthetic_retrieval": {
+        "relevant_ranks": [
+          1,
+          1,
+          1,
+          1
+        ],
+        "mrr": 1,
+        "recall_at3": 1,
+        "not_general_quality_evidence": true
+      }
+    }
+  },
+  "skipped": {
+    "coreml": "FP16 package compiled and functions32/48/64 loaded. Placement query stalled; later loading128 aborted when sampled host free memory fell below14GiB. No completed inference or ANE placement proof. Shared OS compiler caches were not purged.",
+    "mlx-w8a8": "M5-specific GPU tensor kernels not qualified on M2 Ultra",
+    "media-long-context-transport": "16GiB full-suite reservation unavailable; no media,8192-token,HTTP/UDS or labelled-dataset qualification"
+  },
+  "coreml_token_table": {
+    "original_sha256": "56ebbdbfd706c827f3fae1d97aa39135c7ddc0f1e6d9b12f8565f84bbfbda877",
+    "fluid_sha256": "56ebbdbfd706c827f3fae1d97aa39135c7ddc0f1e6d9b12f8565f84bbfbda877",
+    "byte_identical": true,
+    "does_not_prove_graph_weight_lineage": true
+  },
+  "coreml_attempt": {
+    "sampled_peak_owned_footprint_gib": 0.23693925887346268,
+    "stopped": "host free headroom below 14 GiB, retaining other workload floors",
+    "exit": 1,
+    "limitations": "1s sampling, not an allocation ceiling; excludes system CoreML compiler daemons"
+  },
+  "versions": {
+    "rust": "1.97.0",
+    "swift": "6.3.3",
+    "mlx": "0.32.3",
+    "numpy": "2.5.3",
+    "tokenizers": "0.22.2",
+    "python": "3.12.13",
+    "macos_build": "25G83"
+  },
+  "pins": {
+    "google": "914f7f89142e33e77833254d9c9b90c3cef7303b",
+    "mlx_cli": "3575aef259be9e797a757a555c42528ecd049b58",
+    "mlx_vlm_sanitizer_audit": "4f4634bb813c0298cb1467bed2e957526c71d0b4",
+    "coreml_assets": "f9d567d5f36c0a98773cdba26034b8185a353834",
+    "fluiduse": "2c42578f119e52598cdf4eddaee7aca8be2757f0",
+    "dpty_observer": "f060b9c"
+  },
+  "resource_admission": {
+    "full_suite_gib": 16,
+    "full_suite_status": "rejected",
+    "admitted_text_only_gib": 8,
+    "lease_status": "released",
+    "daemon_restarted": false,
+    "installed_dpty_replaced": false
+  }
+}

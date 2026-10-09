@@ -17,6 +17,8 @@ images, 16 kHz WAV audio and video through the core library, CLI and HTTP API.
 CPU reference parity, CUDA/Metal acceleration and bounded FFmpeg decoding are
 optional. See [usage and numerical contract](docs/embeddinggemma2-parity.md),
 [GPU tests](docs/embeddinggemma2-gpu.md) and [video limits](docs/embeddinggemma2-video.md).
+Native [Apple runtime experiments](docs/embeddinggemma2-apple-runtimes.md) are
+benchmark-first proposals, not supported backends.
 
 ## Quick start
 
