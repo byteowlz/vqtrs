@@ -1,4 +1,4 @@
-import json, os, re, signal, subprocess, sys, time
+import json, math, os, re, signal, subprocess, sys, time
 from pathlib import Path
 
 name = sys.argv[1]
@@ -11,6 +11,10 @@ env = {
     "TOKENIZERS_PARALLELISM": "false",
 }
 peak = 0.0
+started = time.monotonic()
+max_seconds = float(os.environ.get("EG2_BENCH_TIMEOUT_SECS", "900"))
+if not math.isfinite(max_seconds) or not 0 < max_seconds <= 900:
+    raise ValueError("benchmark deadline must be finite and in (0,900] seconds")
 samples = []
 stopped = None
 with (root / (name + ".log")).open("w") as log:
@@ -19,6 +23,8 @@ with (root / (name + ".log")).open("w") as log:
     )
     try:
         while p.poll() is None:
+            if time.monotonic() - started > max_seconds:
+                raise RuntimeError("benchmark deadline exceeded")
             graph = subprocess.check_output(["ps", "-axo", "pid=,ppid="], text=True)
             descendants = {p.pid}
             pairs = [
@@ -79,7 +85,11 @@ with (root / (name + ".log")).open("w") as log:
     except BaseException as e:
         stopped = str(e)
         os.killpg(p.pid, signal.SIGTERM)
-        p.wait(timeout=20)
+        try:
+            p.wait(timeout=20)
+        except subprocess.TimeoutExpired:
+            os.killpg(p.pid, signal.SIGKILL)
+            p.wait()
         code = 1
 (root / (name + "-memory.json")).write_text(
     json.dumps(

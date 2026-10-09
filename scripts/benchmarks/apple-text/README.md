@@ -9,7 +9,9 @@ admission for the actual scope. The first pass reserved 8 GiB for sequential tex
 <=512 tokens; it did not qualify the rejected 16 GiB full suite. `guard.py` samples
 owned task footprints and stops its process group above 8 GiB or below 14 GiB host
 free memory. It is not a hard allocation limit; system CoreML compiler daemons are
-not task descendants. No script stops services, purges caches or obtains admission.
+not task descendants. `EG2_BENCH_TIMEOUT_SECS` sets a finite deadline up to900s
+(default900); timeout terminates/reaps only the owned process group. No script
+stops services, purges caches or obtains admission.
 
 Set `EG2_MODEL_DIR` to the original pinned snapshot, `EG2_MLX_CANDIDATE_DIR` to the
 pinned audited MLX checkout, and optionally `EG2_BENCH_WORK_DIR` (default
@@ -30,8 +32,12 @@ MLX0.32.3, NumPy2.5.3, tokenizers0.22.2 and safetensors0.7.0 were tested.
    license here: downloads removed, concurrency1, prevalidated fixture token IDs
    substituted for the tokenizer. Thus Swift timing **excludes tokenization and
    transport**, unlike the Candle/MLX prepared-text timings. `--plans` enables
-   optional placement diagnostics, which stalled locally; do not infer actual
-   ANE execution from `cpuAndNeuralEngine` alone.
+   optional placement diagnostics. The initial resource-constrained query stalled;
+   a separate `PlanMain.swift` query succeeded after the authorized temporary
+   service pause and16GiB admission. Compile it separately (without another `@main`)
+   and run with a90s guard deadline. It reports static preferred-device counts for
+   `embed_32`, not actual runtime execution or proof for every function. Do not
+   infer actual ANE execution from `cpuAndNeuralEngine` alone.
 
 Three warmups/five measured trials; final host vectors synchronize device work.
 Run arms sequentially, but use paired/interleaved repeats for qualification.

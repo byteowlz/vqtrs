@@ -129,7 +129,7 @@ contention on the target Mac. Embedding cosine and texts/second do not prove
 classifier calibration. ANE and GPU share memory/bandwidth, so ANE placement is not
 proof of zero interference. Suggestions/probabilities never grant tool permissions.
 
-## Current execution status
+## Initial 8 GiB text pass
 
 2026-10-09: source/model revisions pinned and shared engine seams inspected.
 The 16 GiB full-suite reservation remained rejected after the user deliberately
@@ -186,3 +186,50 @@ Inspect the [safe machine-readable report](benchmarks/apple-text-2026-10-09.json
 [developer harness](../scripts/benchmarks/apple-text/README.md). Integration issues
 remain blocked. Resume CoreML/full qualification only with adequate admission;
 M5-specific qualification additionally needs an M5 host.
+
+## Admitted CoreML follow-up after temporary Sushi pause
+
+The user subsequently authorized pausing another service for the tests. Sushi was
+temporarily parked, a normal **16 GiB** reservation was admitted, and all text
+arms were remeasured with Sushi stopped. EAVS/forum remained running. The lease
+was released; Sushi was unparked/requested and `/v1/models` returned200 afterward.
+Kev remains parked. No daemon replacement/restart or shared-cache purge occurred.
+The standing queued vqtrs request also auto-started under normal scheduler
+admission; after the tests its health/model-list endpoints returned200. This was
+not a new API restart request or model-inference verification.
+
+CoreML now completed both single and packed FP16 inference. Package compilation
+was 2.32s; loading/initializing seven functions took124.12s, including device
+compilation work. These are not guaranteed cold-start numbers: earlier attempts
+and OS compiler caches were not cleared. A separate `embed_32` compute-plan query
+completed and preferred ANE for all3,862 reported operations. That is **static
+placement evidence for that function**, not a collected runtime execution trace
+or proof for every bucket.
+
+| Case | CPU F32 ms | Metal F32 ms | MLX BF16 edge ms | CoreML single FP16 ms | CoreML packed FP16 ms |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| One16-token query | 62.81 | 33.41 | 21.57 | 5.67 | 18.93 |
+| Eight16-token queries | 479.84 | 255.52 | 24.66 | 43.90 | 19.10 |
+| Eight documents | 590.72 | 248.29 | 50.04 | 44.29 | 19.22 |
+| One120-token text | 205.33 | 33.47 | 26.57 | 8.89 | 18.97 |
+| One463-token text | 793.07 | 61.79 | 38.93 | 40.90 | 40.92 |
+| 32 documents | 2611.60 | 993.33 | 73.29 | 179.31 | 76.58 |
+
+Warm means,3 warmups/5 trials; actual row counts, no extrapolation. These are
+**not directly interchangeable E2E timings**: Swift starts with pretokenized IDs,
+including table gathering/prediction/host copy but excluding tokenizer/transport;
+Candle and MLX include tokenizing prepared text. Runs remain sequential, not
+interleaved. Single-query CoreML and bulk MLX look promising, not universally best.
+
+CoreML single worst maxabs=`0.00157288`, min cosine=`0.99996441`; packed
+maxabs=`0.00154997`, min cosine=`0.99996619`. Both **fail the unchanged F32 gate**.
+FP16 output unit-norm error reached `0.00093748`; an explicit F32 renormalization
+contract may be needed, not hidden postprocessing. Toy retrieval still ranks all
+four labelled queries first, not general task-quality evidence. Model source/
+graph lineage, reduced-precision approval, two labelled datasets, runtime traces,
+media/long-context, transport and integration isolation remain pending.
+
+The [follow-up report](benchmarks/apple-text-coreml-followup-2026-10-09.json)
+preserves both precision/mode arms and all five trial timings. Its sampled worker
+footprint does not include shared system CoreML compiler daemons and must not be
+advertised as total CoreML memory. Native features remain unimplemented/blocked.
