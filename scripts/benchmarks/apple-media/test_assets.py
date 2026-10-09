@@ -1,4 +1,5 @@
 """Pure CPU asset/type checks, no model loading or network."""
+
 import hashlib
 import json
 import runpy
@@ -17,7 +18,12 @@ class AssetsTests(unittest.TestCase):
         data = b"fixture"
         manifest = {
             "revision": "fixture-only",
-            "files": {"file.bin": {"size": len(data), "sha256": hashlib.sha256(data).hexdigest()}},
+            "files": {
+                "file.bin": {
+                    "size": len(data),
+                    "sha256": hashlib.sha256(data).hexdigest(),
+                }
+            },
         }
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
