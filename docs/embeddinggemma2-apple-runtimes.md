@@ -1,9 +1,10 @@
-# Apple runtime extensions: benchmark before integration
+# Experimental Apple runtime extensions
 
-Status: user-approved direction; preliminary M2 text measurements recorded,
+Status: user-approved staged integration of **every verified modality**, not a
+text-only rollout. M2 text measurements are recorded; native backends are still
 **not implemented or benchmark-qualified**.
-Tracker: `vqtrs-s7zm`; benchmark `vqtrs-2g84`; CoreML `vqtrs-8fe9`; MLX
-`vqtrs-6dqt`. Both implementation issues are blocked by the benchmark.
+Tracker: `vqtrs-s7zm`; targeted gate `vqtrs-2g84`; CoreML `vqtrs-8fe9`; MLX
+`vqtrs-6dqt`. The gate is bounded; exhaustive research is not a prerequisite.
 
 ## Boundaries
 
@@ -13,7 +14,7 @@ when optional features are compiled. Existing CPU byte-identity and GPU toleranc
 contracts in [parity](embeddinggemma2-parity.md) and
 [GPU verification](embeddinggemma2-gpu.md) remain unchanged.
 
-Proposed independent Cargo features, only to be wired after qualification:
+Proposed independent Cargo features, to be wired after targeted qualification:
 
 - `embeddinggemma2-coreml`: native CoreML models, not the existing `coreml` feature
   which registers ONNX Runtime's CoreML execution provider.
@@ -90,7 +91,29 @@ and exact checkpoint equivalence still need verification for the converted asset
    criterion is separate from the unchanged F32 contract; do not silently relax
    max-error/cosine gates to get a new backend accepted.
 
-## Integration gate
+## Targeted experimental gate
+
+The user approved testing and integrating all verified modalities. Text-only was
+an earlier resource/testing boundary, not the intended product scope. Native
+image and audio tests, including sequential versus GPU-to-ANE overlapped audio,
+are part of the initial gate. Test video through each actual supported path;
+report CoreML sequence overflow and the regular MLX media path explicitly.
+Do not make an unsupported modality silently fall back to Candle or turbo.
+
+Before exposing a capability, check shared preprocessing/token identity, finite
+768-dimensional outputs, explicit normalization/precision, labelled retrieval
+comparisons, ragged/reordered/neighbour isolation, malformed inputs and actual
+context/window boundaries. Reduced-precision acceptance is separate from the
+unchanged F32 contract and must be documented before claiming qualification.
+Library/CLI/HTTP/UDS, feature isolation and helper lifecycle tests are integration
+coverage, not a reason to delay all implementation until a research program ends.
+
+Defer broader datasets, M5 W8A8, exhaustive device traces, long-running contention
+and additional hardware qualification. Static placement is still not runtime
+execution proof. Experimental integration is not a default replacement or a
+claim of universal accuracy/performance equivalence.
+
+## Integration seam
 
 The existing seam is `catalog::{Backend,Resolved}` and `embed::{Inner,Engine}`,
 with Candle internals behind `embedding_gemma2`. Extend the loaded-engine seam;
@@ -232,4 +255,102 @@ media/long-context, transport and integration isolation remain pending.
 The [follow-up report](benchmarks/apple-text-coreml-followup-2026-10-09.json)
 preserves both precision/mode arms and all five trial timings. Its sampled worker
 footprint does not include shared system CoreML compiler daemons and must not be
-advertised as total CoreML memory. Native features remain unimplemented/blocked.
+advertised as total CoreML memory. Native features remained unimplemented at
+that checkpoint; the targeted follow-up below narrows the integration gate.
+
+## Targeted multimodal and retrieval follow-up
+
+The user approved integrating **every verified modality**, not a text-only
+rollout. A further normal16 GiB reservation was admitted after temporarily
+parking the same Sushi service. The reservation was released and Sushi restored
+(`/v1/models`200); API200, EAVS expected401 and forum200 remained available.
+Kev stays parked. No daemon/global replacement or cache purge occurred.
+
+This pass pins CoreML assets to `3f978ddf92cac9aa07eb2dcf6eb36cf450f3dba4`,
+FluidUse to `e974b3841aaa438cd4d35dcbc5ba385b4c720643`, and regular mlx-vlm
+model definitions to `4f4634bb813c0298cb1467bed2e957526c71d0b4`. The CoreML
+token table and text weight blob match the earlier asset pin's hashes; that is
+not complete converted-graph lineage proof. Assets are hash-locked in the
+[developer harness](../scripts/benchmarks/apple-media/README.md).
+
+These are developer probes of native graphs, **not integrated backends**. Images
+and video use the unchanged F32 oracle's preprocessed tensors to isolate model
+math from decoder/frontend differences. Audio CoreML consumes the original
+synthetic16 kHz WAV; regular MLX consumes the F32 oracle's mel/features/masks.
+The long MLX audio case uses the existing30-second-truncated oracle, not a new
+31.5-second waveform-policy test. Regular MLX uses original BF16 checkpoint
+weights with source-defined activation promotion; it is not turbo or W8A8.
+
+| Native path | Completed cases | Worst maxabs vs F32 | Minimum cosine |
+| --- | ---: | ---: | ---: |
+| CoreML images | 7 | 0.00101120 | 0.99998847 |
+| CoreML audio | 4, <=10 s | 0.01633861 | 0.99237364 |
+| CoreML video | 2, 3 frames /413 tokens | 0.00104854 | 0.99998008 |
+| Regular MLX images | 7 | 0.00127605 | 0.99993983 |
+| Regular MLX audio | 5 | 0.00200861 | 0.99983819 |
+| Regular MLX video | 3, including32 frames | 0.00113364 | 0.99994896 |
+
+Every completed vector is finite and768-dimensional. CoreML rejects the
+32-frame4226-token case rather than truncating/falling back. Its300 ms sine-wave
+audio case has materially greater drift than the other audio fixtures; do not
+conceal it or assume its cause. A regular MLX padding diagnostic changed this
+short clip by cosine0.9999276, which does not establish the CoreML drift's cause.
+General audio/image retrieval quality and quieter/boundary WAVs remain unproved.
+
+### Two bounded labelled retrieval comparisons
+
+723 prepared texts:32 queries and691 documents. For each public BEIR dataset,
+select the first16 sorted test queries, all their relevant documents and96
+seeded distractors. These are **not full BEIR scores**. Identical text was
+explicitly capped at512 tokens before all arms;64 rows were capped. No native
+backend truncation is claimed. Outputs were explicitly F32-renormalized for
+these retrieval comparisons.
+
+The reference is one Candle Metal F32 pass with16 dataset-derived CPU spot
+checks: maxabs2.30968e-7/mincos0.99999999999865, passing the unchanged F32 gate.
+
+| Arm | SciFact nDCG/recall/MRR@10 | NFCorpus nDCG@10 | Recall@10 | MRR@10 |
+| --- | --- | ---: | ---: | ---: |
+| Candle Metal F32 | 1 /1 /1 | 0.49874020 | 0.28069813 | 0.69531250 |
+| Regular MLX BF16 | 1 /1 /1 | 0.49391529 | 0.28003323 | 0.69375000 |
+| CoreML FP16 single | 1 /1 /1 | 0.49783802 | 0.28069813 | 0.69444444 |
+| CoreML FP16 packed | 1 /1 /1 | 0.49783802 | 0.28069813 | 0.69444444 |
+
+Largest observed nDCG loss:0.4825 percentage points (MLX); CoreML0.0902 points.
+Top10 overlap versus F32 is98.125–100% on these subsets. All native arms still
+fail the unchanged F32 numerical gate: text maxabs reaches0.00256855/mincos
+0.99977805 for MLX and0.00196834/0.99988252 for CoreML packed.
+
+CoreML fixed-bucket transitions,511/512 acceptance and513 rejection were checked
+in the developer adapter. Packed reordering maxabs0.00036621 and packed versus
+single0.00048828; regular MLX reordering was exact, ragged versus singleton
+maxabs0.00130207. These are precision-sensitive diagnostics, not bit-identity or
+production transport guarantees.
+
+### Audio overlap and implementation decision
+
+Four synthetic clips, two warmups/three paired trials, ordered two-window
+lookahead: sequential group mean153.01 ms, overlap153.21 ms; output maxabs0.
+There is **no reliable local speedup** demonstrated. Timings exclude file decode,
+startup and transport; explicit CPU+GPU audio /CPU+NE text selections are not
+runtime device traces. M5 author results remain separate.
+
+The [safe report](benchmarks/apple-multimodal-qualification-2026-10-09.json)
+records actual counts, hashes, subset scope and limitations. Raw vectors,
+datasets/weights and process samples remain local. A watchdog exit/cleanup race
+was regression-tested and fixed without relaxing memory/deadline limits; the
+first extra probe's numerics are diagnostic only, its monitored rerun succeeded.
+
+These results support moving into **experimental** integration, not an F32
+replacement. Proposed task acceptance is at most1 percentage-point absolute
+nDCG/recall/MRR@10 loss on the bounded subsets, strict finite768d/F32-normalized
+outputs, correct identity/order and explicit limits. Numerical media drift,
+especially short CoreML audio, needs explicit reduced-precision acceptance; the
+proposal is not retroactively labelled approved. Preserve independent features
+and expose each verified capability, not an artificial text-only subset.
+
+A safe binding candidate, `coreml`0.4.0, exposes typed Float16 arrays, fixed-function
+selection and compute-unit configuration; its owned handles are Send but not
+Sync, so inference ownership must be serialized. It has not been added to the
+workspace or numerically qualified. Production binding/helper design and
+library/CLI/HTTP/UDS coverage remain next, not another exhaustive research program.

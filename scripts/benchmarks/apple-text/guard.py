@@ -84,12 +84,19 @@ with (root / (name + ".log")).open("w") as log:
         code = p.returncode
     except BaseException as e:
         stopped = str(e)
-        os.killpg(p.pid, signal.SIGTERM)
-        try:
-            p.wait(timeout=20)
-        except subprocess.TimeoutExpired:
-            os.killpg(p.pid, signal.SIGKILL)
-            p.wait()
+        if p.poll() is None:
+            try:
+                os.killpg(p.pid, signal.SIGTERM)
+            except (ProcessLookupError, PermissionError):
+                # Darwin can report EPERM for a process group that just exited.
+                # Never swallow a real inability to terminate a live owned task.
+                if p.poll() is None:
+                    raise
+            try:
+                p.wait(timeout=20)
+            except subprocess.TimeoutExpired:
+                os.killpg(p.pid, signal.SIGKILL)
+                p.wait()
         code = 1
 (root / (name + "-memory.json")).write_text(
     json.dumps(
