@@ -28,7 +28,7 @@ MLX0.32.3, NumPy2.5.3, tokenizers0.22.2 and safetensors0.7.0 were tested.
    is separate from loading. Do not import downloaded checkpoint Python.
 4. Fetch the pinned CoreML package and BF16 table as data into `<work>/coreml`.
    Compile `swiftc -O -parse-as-library Manager.swift CoreMLMain.swift -o <binary>`
-   and run through the guard. The modified MIT FluidUse manager retains its
+   and run through the guard. The modified Apache-2.0 FluidUse manager retains its
    license here: downloads removed, concurrency1, prevalidated fixture token IDs
    substituted for the tokenizer. Thus Swift timing **excludes tokenization and
    transport**, unlike the Candle/MLX prepared-text timings. `--plans` enables

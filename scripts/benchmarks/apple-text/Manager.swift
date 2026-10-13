@@ -1,5 +1,5 @@
 // Adapted from FluidUse 2c42578f119e52598cdf4eddaee7aca8be2757f0.
-// MIT license retained in FluidUse-LICENSE. Static download/load routines omitted.
+// Apache-2.0 license retained in FluidUse-LICENSE. Static download/load routines omitted.
 @preconcurrency import CoreML
 import Foundation
 
