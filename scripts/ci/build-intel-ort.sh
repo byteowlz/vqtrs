@@ -27,8 +27,9 @@ uv run --no-project --python 3.12 --with cmake==3.31.6 --with ninja==1.11.1.3 \
 
 LIB="$ROOT/build/Release"
 test -f "$LIB/libonnxruntime.1.24.2.dylib"
-file "$LIB/libonnxruntime.1.24.2.dylib" | tee "$ROOT/architecture.txt"
-file "$LIB/libonnxruntime.1.24.2.dylib" | rg 'x86_64' >/dev/null
+ARCHITECTURE=$(file "$LIB/libonnxruntime.1.24.2.dylib")
+printf '%s\n' "$ARCHITECTURE" | tee "$ROOT/architecture.txt"
+[[ "$ARCHITECTURE" == *x86_64* ]]
 install_name_tool -id '@rpath/libonnxruntime.1.24.2.dylib' "$LIB/libonnxruntime.1.24.2.dylib"
 cp "$ROOT/source/LICENSE" "$LIB/ONNXRuntime-LICENSE"
 cp "$ROOT/source/ThirdPartyNotices.txt" "$LIB/ONNXRuntime-ThirdPartyNotices.txt"

@@ -16,6 +16,7 @@ import time
 import urllib.error
 import urllib.request
 from pathlib import Path
+from urllib.parse import urlsplit
 
 MODEL = "Qdrant/all-MiniLM-L6-v2-onnx"
 TEXTS = ["A bicycle has two wheels.", "Fresh bread is baked in an oven."]
@@ -42,10 +43,12 @@ def request(url, body=None, status=200):
     )
     try:
         with urllib.request.urlopen(req, timeout=120) as response:
-            code, raw = response.status, response.read()
+            code, raw, headers = response.status, response.read(), response.headers
     except urllib.error.HTTPError as error:
-        code, raw = error.code, error.read()
+        code, raw, headers = error.code, error.read(), error.headers
     assert code == status, (code, status, raw[:400])
+    if status in (429, 503):
+        assert headers.get("Retry-After") == "1"
     return json.loads(raw) if status == 200 else None
 
 
@@ -80,6 +83,41 @@ def http_checks(url, expected):
     request(url + "/v1/embeddings", {"model": MODEL}, 422)
     assert request(url + "/health")["in_flight"] == 0
     return actual
+
+
+def shedding_checks(url):
+    """Hold one incomplete body to prove pre-body admission without expensive inference."""
+    endpoint = urlsplit(url)
+    body = json.dumps({"input": TEXTS}).encode()
+    header = (
+        f"POST /v1/embeddings HTTP/1.1\r\nHost: localhost\r\n"
+        f"Content-Type: application/json\r\nContent-Length: {len(body)}\r\n"
+        "Connection: close\r\n\r\n"
+    ).encode()
+    with socket.create_connection(
+        (endpoint.hostname, endpoint.port), timeout=10
+    ) as held:
+        held.sendall(header)
+        deadline = time.monotonic() + 5
+        while True:
+            try:
+                request(url + "/health", status=503)
+                break
+            except AssertionError:
+                assert time.monotonic() < deadline, (
+                    "incomplete body did not acquire a permit"
+                )
+                time.sleep(0.05)
+        request(url + "/v1/embeddings", {"input": TEXTS}, 429)
+        held.sendall(body)
+        raw = bytearray()
+        while chunk := held.recv(8192):
+            raw.extend(chunk)
+            assert len(raw) <= 256 * 1024
+        head, payload = raw.split(b"\r\n\r\n", 1)
+        assert head.startswith(b"HTTP/1.1 200")
+        vectors(json.loads(payload))
+    assert request(url + "/health")["in_flight"] == 0
 
 
 def unix_checks(cli, work, env, actual):
@@ -173,6 +211,7 @@ def run(cli, api, work):
         try:
             wait_ready(child, url)
             actual = http_checks(url, expected)
+            shedding_checks(url)
             if unix:
                 unix_checks(cli, work, env, actual)
         finally:
@@ -189,6 +228,7 @@ def run(cli, api, work):
                 "unix_transport": "passed" if unix else "explicitly unsupported",
                 "batch_limit": 2,
                 "inflight_limit": 1,
+                "prebody_shedding_retry_after": True,
             }
         )
     )
