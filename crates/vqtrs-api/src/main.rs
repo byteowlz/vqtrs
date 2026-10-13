@@ -137,7 +137,7 @@ async fn try_main() -> Result<()> {
         .with_state(state);
 
     // Unix platforms keep the warm local channel; other platforms are TCP-only.
-    socket::serve(&app, socket_path)?;
+    socket::serve(&app, socket_path.as_deref())?;
 
     let addr = SocketAddr::new(host, port);
     info!("serving on http://{addr}");

@@ -1,6 +1,6 @@
 //! Platform-aware optional local socket; TCP remains available everywhere.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 #[cfg(unix)]
 use anyhow::Context;
@@ -39,10 +39,10 @@ fn default_path() -> PathBuf {
 ///
 /// Returns an error when binding a selected socket fails.
 #[cfg(unix)]
-pub fn serve(app: &Router, path: Option<PathBuf>) -> Result<()> {
+pub fn serve(app: &Router, path: Option<&Path>) -> Result<()> {
     if let Some(path) = path {
-        let _ = std::fs::remove_file(&path);
-        let listener = tokio::net::UnixListener::bind(&path)
+        let _ = std::fs::remove_file(path);
+        let listener = tokio::net::UnixListener::bind(path)
             .with_context(|| format!("binding unix socket {}", path.display()))?;
         log::info!("serving on unix:{}", path.display());
         let app = app.clone();
@@ -61,7 +61,7 @@ pub fn serve(app: &Router, path: Option<PathBuf>) -> Result<()> {
 ///
 /// Returns an error if an unsupported Unix listener was selected.
 #[cfg(not(unix))]
-pub fn serve(_app: &Router, path: Option<PathBuf>) -> Result<()> {
+pub fn serve(_app: &Router, path: Option<&Path>) -> Result<()> {
     if path.is_some() {
         bail!("Unix socket listener selected on an unsupported platform");
     }
@@ -91,7 +91,7 @@ mod tests {
             .as_nanos();
         let path = std::env::temp_dir().join(format!("vqtrs-uds-{nonce}.sock"));
         let app = Router::new().route("/probe", axum::routing::get(|| async { "warm" }));
-        serve(&app, Some(path.clone())).unwrap();
+        serve(&app, Some(&path)).unwrap();
         let mut client = tokio::net::UnixStream::connect(&path).await.unwrap();
         client
             .write_all(b"GET /probe HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n")
