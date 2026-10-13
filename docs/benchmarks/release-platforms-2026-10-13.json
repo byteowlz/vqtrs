@@ -1,0 +1,96 @@
+{
+  "date": "2026-10-13",
+  "source_revision": "c63b14302f34043b11b1886388cf3b4f433c2f9b",
+  "ci_run": "https://github.com/byteowlz/vqtrs/actions/runs/38449508416",
+  "status": "passed",
+  "rust_toolchain": "1.97.0",
+  "build_profile": "default ONNX-only; CPU inference smoke",
+  "windows_optional_cpu_embeddinggemma2": "check/strict Clippy/offline tests passed; not full model/media inference",
+  "intel_ort": {
+    "version": "1.24.2",
+    "api": 24,
+    "source": "058787ceead760166e3c50a0a4cba8a833a6f53f",
+    "compile_fix": "c7c939ff1e961284dd3b6f720e7ec980f8d6d331",
+    "patch_sha256": "cca159b2919d7070ff5d7965d4bdd0558893cc93a9a7f46dadbb39077440b336",
+    "provider": "CPU",
+    "relocation": "extracted-archive inference with DYLD_LIBRARY_PATH removed",
+    "minimum_macos": "13.0"
+  },
+  "platforms": [
+    {
+      "target": "aarch64-apple-darwin",
+      "archive": "vqtrs-c63b14302f34-aarch64-apple-darwin.tar.gz",
+      "sha256": "b5a4e54b1543ab4890f4328916412f046aa76c249a492bf0cd49292e2db44113",
+      "smoke": {
+        "status": "passed",
+        "version": "0.2.0",
+        "model": "Qdrant/all-MiniLM-L6-v2-onnx",
+        "dimensions": 384,
+        "finite_unit_norm": true,
+        "http_cli_parity": true,
+        "unix_transport": "passed",
+        "batch_limit": 2,
+        "inflight_limit": 1,
+        "prebody_shedding_retry_after": true
+      }
+    },
+    {
+      "target": "x86_64-unknown-linux-gnu",
+      "archive": "vqtrs-c63b14302f34-x86_64-unknown-linux-gnu.tar.gz",
+      "sha256": "0c9b4c2bdf26be702e1590bb9cf10f642a61f6d0b019976b1a113006731e9df5",
+      "smoke": {
+        "status": "passed",
+        "version": "0.2.0",
+        "model": "Qdrant/all-MiniLM-L6-v2-onnx",
+        "dimensions": 384,
+        "finite_unit_norm": true,
+        "http_cli_parity": true,
+        "unix_transport": "passed",
+        "batch_limit": 2,
+        "inflight_limit": 1,
+        "prebody_shedding_retry_after": true
+      }
+    },
+    {
+      "target": "x86_64-pc-windows-msvc",
+      "archive": "vqtrs-c63b14302f34-x86_64-pc-windows-msvc.zip",
+      "sha256": "1b62d12b01fc8e40d7ab0d858bed02771d2fa42bbea25383b978a3d543c4211d",
+      "smoke": {
+        "status": "passed",
+        "version": "0.2.0",
+        "model": "Qdrant/all-MiniLM-L6-v2-onnx",
+        "dimensions": 384,
+        "finite_unit_norm": true,
+        "http_cli_parity": true,
+        "unix_transport": "explicitly unsupported",
+        "batch_limit": 2,
+        "inflight_limit": 1,
+        "prebody_shedding_retry_after": true
+      }
+    },
+    {
+      "target": "x86_64-apple-darwin",
+      "archive": "vqtrs-c63b14302f34-x86_64-apple-darwin.tar.gz",
+      "sha256": "1e44d4ed2176876d4c255cda7e5ff5ba3e8f4d5b550860e266f1a56e787dde2e",
+      "smoke": {
+        "status": "passed",
+        "version": "0.2.0",
+        "model": "Qdrant/all-MiniLM-L6-v2-onnx",
+        "dimensions": 384,
+        "finite_unit_norm": true,
+        "http_cli_parity": true,
+        "unix_transport": "passed",
+        "batch_limit": 2,
+        "inflight_limit": 1,
+        "prebody_shedding_retry_after": true
+      }
+    }
+  ],
+  "gaps": [
+    "Self-verification on native CI runners, not independent code review or all OS installations.",
+    "One named ONNX smoke model; no cross-platform numerical-equivalence, whole-catalog, GPU or native CoreML/MLX archive qualification.",
+    "These are commit-addressed CI artifacts, not published release assets. Manifest version remains 0.2.0; source is not immutable v0.2.0/a30f2f0.",
+    "No new version/tag, GitHub release, registry publication or installed production binary replacement.",
+    "Live installed API inference and actual MacBook/lab evidence remain separate and unverified."
+  ]
+}

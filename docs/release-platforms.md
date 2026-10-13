@@ -7,10 +7,10 @@ Main/PR/manual runs upload CI artifacts only; they do not create a release.
 matching `Cargo.toml`, after all four extracted-archive smokes and checksums pass.
 Rust/rustfmt/Clippy are pinned to the already-qualified **1.97.0** toolchain
 (`rust-toolchain.toml` and CI), and its full identity is included in each archive.
-Floating stable1.99 added new style rules, including rewriting numerical-port
+Floating stable 1.99 added new style rules, including rewriting numerical-port
 chunk/bit-width code. A toolchain upgrade is a separately qualified change, not
 an automatic release-time arithmetic refactor. Workspace lint levels remain
-unchanged/strict; passing1.97 checks is not claimed to pass newer Clippy.
+unchanged/strict; passing 1.97 checks is not claimed to pass newer Clippy.
 Manual release dispatch defaults to **not publishing**. No registry publication.
 
 ## Transports
@@ -27,6 +27,22 @@ mutation, real Unix listener HTTP, and Windows-only client rejection. Native
 Windows CI also builds/lints/tests the optional CPU `embeddinggemma2` feature.
 Default archives never acquire it or the experimental Apple worker dependencies.
 
+## Verified candidate archives
+
+[Native matrix 38449508416](https://github.com/byteowlz/vqtrs/actions/runs/38449508416)
+passed all four platforms at source `c63b143` with Rust 1.97.0. Actual archives,
+checksums and extracted-archive smoke reports were downloaded and checked;
+[aggregate evidence](benchmarks/release-platforms-2026-10-13.json) records their
+hashes. Windows also passed optional CPU `embeddinggemma2` build/lint/offline
+tests, not full media/model inference. Default ONNX smoke proves finite normalized
+384-vectors, CLI/HTTP agreement, bounded batch/pre-body load shedding/recovery,
+and Unix UDS (Windows explicitly rejects sockets). This is self-verification on
+CI images, not universal OS/catalog/GPU/native-worker qualification.
+
+These are commit-addressed CI artifacts with the manifest's current 0.2.0 version,
+**not published v0.2.0 assets**. No new tag/release or installed upgrade occurred.
+A corrective release needs a new matching manifest version/annotated tag.
+
 ## Intel macOS runtime
 
 `ort-sys` rc.12 needs ONNX Runtime API24 but provides no Intel macOS CPU prebuilt.
@@ -41,7 +57,7 @@ warning suppression, older runtime, different backend/feature set or GPU provide
 The shared CPU library, source/build identity and upstream license/notices are
 bundled. Binaries use an executable-relative rpath. The extracted archive's
 version, actual 384-dimensional normalized ONNX embeddings, CLI/HTTP parity,
-UDS and limits (including pre-body429/503 shedding with `Retry-After`) are checked
+UDS and limits (including pre-body 429/503 shedding with `Retry-After`) are checked
 with `DYLD_LIBRARY_PATH` removed. These checks must
 pass; source inspection/architecture labels alone are not linking evidence.
 
