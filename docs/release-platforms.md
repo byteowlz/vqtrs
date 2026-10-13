@@ -25,12 +25,18 @@ Default archives never acquire it or the experimental Apple worker dependencies.
 
 `ort-sys` rc.12 needs ONNX Runtime API24 but provides no Intel macOS CPU prebuilt.
 `scripts/ci/build-intel-ort.sh` builds the official **1.24.2** source at
-`058787ceead760166e3c50a0a4cba8a833a6f53f` on a native Intel runner. It does not
-substitute an older runtime, different backend, feature set or GPU provider.
+`058787ceead760166e3c50a0a4cba8a833a6f53f` on a native Intel runner (macOS13+
+runtime target). Its reviewed two-line upstream Clang repair
+`c7c939ff1e961284dd3b6f720e7ec980f8d6d331` is backported: MLAS's existing narrow
+pragma guard referenced a config macro it never included, so a dead constexpr
+branch tripped `-Warray-bounds`. The patch changes only the pragma guards, not
+arithmetic, and its SHA256/source identity is recorded in the bundle. No global
+warning suppression, older runtime, different backend/feature set or GPU provider.
 The shared CPU library, source/build identity and upstream license/notices are
 bundled. Binaries use an executable-relative rpath. The extracted archive's
 version, actual 384-dimensional normalized ONNX embeddings, CLI/HTTP parity,
-UDS and limits are checked with `DYLD_LIBRARY_PATH` removed. These checks must
+UDS and limits (including pre-body429/503 shedding with `Retry-After`) are checked
+with `DYLD_LIBRARY_PATH` removed. These checks must
 pass; source inspection/architecture labels alone are not linking evidence.
 
 Local offline checks:
