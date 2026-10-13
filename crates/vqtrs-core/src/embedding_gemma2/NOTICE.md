@@ -25,4 +25,13 @@ versions; retain these notices and license files when redistributing.
   `jpeg.rs` is a modified safe Rust decoder with ported IDCT, upsampling and
   color-conversion arithmetic.
 
+- Optional native CoreML adapter: graph/input-layout reference from FluidUse
+  `e974b3841aaa438cd4d35dcbc5ba385b4c720643`, Apache License 2.0
+  (`FluidUse-LICENSE`).
+  CoreML assets remain under their upstream model terms; they are not bundled.
+- Optional regular MLX adapter: imports authenticated tensor definitions from
+  mlx-vlm `4f4634bb813c0298cb1467bed2e957526c71d0b4`, Copyright 2025
+  Prince Canuma, MIT (`mlx-vlm-LICENSE`). Source must be provisioned explicitly;
+  the original checkpoint and its licensing remain separate.
+
 This software is based in part on the work of the Independent JPEG Group.

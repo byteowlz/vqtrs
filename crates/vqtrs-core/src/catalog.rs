@@ -25,6 +25,21 @@ pub enum Backend {
     Qwen3,
     /// EmbeddingGemma 2 running through vqtrs' candle backend.
     EmbeddingGemma2,
+    /// Experimental native `CoreML` FP16 graphs, with GPU media and NE-preferred text.
+    EmbeddingGemma2CoreMl,
+    /// Experimental regular MLX backend with original BF16 weights (not turbo).
+    EmbeddingGemma2Mlx,
+}
+
+impl Backend {
+    /// Whether this backend supports typed EmbeddingGemma 2 media inputs.
+    #[must_use]
+    pub const fn supports_multimodal(self) -> bool {
+        matches!(
+            self,
+            Self::EmbeddingGemma2 | Self::EmbeddingGemma2CoreMl | Self::EmbeddingGemma2Mlx
+        )
+    }
 }
 
 /// A single text-embedding model in the catalog.
@@ -69,6 +84,9 @@ pub enum Resolved {
     /// An EmbeddingGemma 2 model identified by repository id, with known dimensionality.
     #[cfg(feature = "embeddinggemma2")]
     EmbeddingGemma2 { repo: String, dimensions: usize },
+    /// An independently opt-in experimental native Apple runtime.
+    #[cfg(any(feature = "embeddinggemma2-coreml", feature = "embeddinggemma2-mlx"))]
+    Native { backend: Backend, dimensions: usize },
 }
 
 /// The full text-embedding catalog (ONNX and candle models).
@@ -90,7 +108,13 @@ pub fn hf_repo(name: &str) -> Option<&'static str> {
     DENSE_MODELS
         .iter()
         .find(|m| m.code == name || (!m.variant.is_empty() && m.variant == name))
-        .map(|m| m.code)
+        .map(|m| {
+            if m.backend.supports_multimodal() {
+                "google/embeddinggemma-2"
+            } else {
+                m.code
+            }
+        })
 }
 
 const DENSE_MODELS: &[ModelInfo] = &[
@@ -281,6 +305,20 @@ const DENSE_MODELS: &[ModelInfo] = &[
         description: "EmbeddingGemma 2 text, image and audio (candle)",
         backend: Backend::EmbeddingGemma2,
     },
+    ModelInfo {
+        code: "vqtrs/embeddinggemma-2-coreml-fp16-3f978ddf",
+        variant: "",
+        dimensions: 768,
+        description: "Experimental CoreML FP16/normalized F32;512tokens,<=10s audio;short-audio drift",
+        backend: Backend::EmbeddingGemma2CoreMl,
+    },
+    ModelInfo {
+        code: "vqtrs/embeddinggemma-2-mlx-regular-bf16-4f4634bb",
+        variant: "",
+        dimensions: 768,
+        description: "Experimental regular MLX/original BF16/normalized F32;8192tokens,<=30s audio;not turbo",
+        backend: Backend::EmbeddingGemma2Mlx,
+    },
     // --- Snowflake Arctic ---
     ModelInfo {
         code: "snowflake/snowflake-arctic-embed-xs",
@@ -385,6 +423,9 @@ pub fn resolve_dense(name: &str) -> Result<Resolved> {
             Backend::EmbeddingGemma2 => Err(VqtrsError::Backend(format!(
                 "model `{name}` needs the `embeddinggemma2` feature (rebuild with --features embeddinggemma2)"
             ))),
+            Backend::EmbeddingGemma2CoreMl | Backend::EmbeddingGemma2Mlx => {
+                resolve_native(info, name)
+            }
             Backend::Onnx => info.variant.parse::<EmbeddingModel>().map_or_else(
                 |_| Err(VqtrsError::UnknownModel(name.to_owned())),
                 |model| {
@@ -406,6 +447,30 @@ pub fn resolve_dense(name: &str) -> Result<Resolved> {
             })
         },
     )
+}
+
+fn resolve_native(info: &ModelInfo, name: &str) -> Result<Resolved> {
+    let (feature, enabled) = match info.backend {
+        Backend::EmbeddingGemma2CoreMl => (
+            "embeddinggemma2-coreml",
+            cfg!(feature = "embeddinggemma2-coreml"),
+        ),
+        Backend::EmbeddingGemma2Mlx => {
+            ("embeddinggemma2-mlx", cfg!(feature = "embeddinggemma2-mlx"))
+        }
+        _ => return Err(VqtrsError::UnknownModel(name.to_owned())),
+    };
+    #[cfg(any(feature = "embeddinggemma2-coreml", feature = "embeddinggemma2-mlx"))]
+    if enabled {
+        return Ok(Resolved::Native {
+            backend: info.backend,
+            dimensions: info.dimensions,
+        });
+    }
+    let _ = enabled;
+    Err(VqtrsError::Backend(format!(
+        "model `{name}` needs the independent `{feature}` feature"
+    )))
 }
 
 /// Resolve a user-supplied name to a [`RerankerModel`].
@@ -508,6 +573,8 @@ mod tests {
             Resolved::Qwen3 { .. } => panic!("expected ONNX backend"),
             #[cfg(feature = "embeddinggemma2")]
             Resolved::EmbeddingGemma2 { .. } => panic!("expected ONNX backend"),
+            #[cfg(any(feature = "embeddinggemma2-coreml", feature = "embeddinggemma2-mlx"))]
+            Resolved::Native { .. } => panic!("expected ONNX backend"),
         }
     }
 
@@ -529,6 +596,8 @@ mod tests {
             Resolved::Onnx { .. } => panic!("expected Qwen3 backend"),
             #[cfg(feature = "embeddinggemma2")]
             Resolved::EmbeddingGemma2 { .. } => panic!("expected Qwen3 backend"),
+            #[cfg(any(feature = "embeddinggemma2-coreml", feature = "embeddinggemma2-mlx"))]
+            Resolved::Native { .. } => panic!("expected Qwen3 backend"),
         }
     }
 
@@ -597,6 +666,10 @@ mod tests {
             // Candle entries only resolve when their feature is built in.
             if (m.backend == Backend::Qwen3 && cfg!(not(feature = "qwen3")))
                 || (m.backend == Backend::EmbeddingGemma2 && cfg!(not(feature = "embeddinggemma2")))
+                || (m.backend == Backend::EmbeddingGemma2CoreMl
+                    && cfg!(not(feature = "embeddinggemma2-coreml")))
+                || (m.backend == Backend::EmbeddingGemma2Mlx
+                    && cfg!(not(feature = "embeddinggemma2-mlx")))
             {
                 assert!(
                     resolved.is_err(),

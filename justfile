@@ -115,6 +115,22 @@ check-eg2:
     cargo clippy --workspace --all-targets --features vqtrs-api/embeddinggemma2,vqtrs-cli/embeddinggemma2
     cargo test --workspace --features vqtrs-api/embeddinggemma2,vqtrs-cli/embeddinggemma2
 
+# Independent opt-in native build; no install or production restart
+build-native-eg2 FEATURES="embeddinggemma2-coreml,embeddinggemma2-mlx":
+    cargo build --workspace --features "{{FEATURES}}"
+
+# Native compile/lint/offline Rust and private Python validation
+check-native-eg2 PYTHON:
+    cargo fmt --all -- --check
+    cargo check --workspace --features embeddinggemma2-coreml,embeddinggemma2-mlx
+    cargo clippy --workspace --all-targets --features embeddinggemma2-coreml,embeddinggemma2-mlx
+    cargo test --workspace --features embeddinggemma2-coreml,embeddinggemma2-mlx
+    uv run --no-project "{{PYTHON}}" -I scripts/parity/test_eg2_native_worker.py
+
+# Admitted Apple Silicon library probe; writes synthetic aggregate metrics only
+native-eg2-library MODEL MODEL_DIR MEDIA_DIR REPORT:
+    cargo run -p vqtrs-core --features embeddinggemma2-coreml,embeddinggemma2-mlx,embeddinggemma2-metal --example eg2_native_smoke -- "{{MODEL}}" "{{MODEL_DIR}}" "{{MEDIA_DIR}}" "{{REPORT}}"
+
 # Compare embeddings with a previously generated Python reference (needs checkpoint)
 eg2-parity REFERENCE MODEL_DIR CASES="scripts/parity/eg2_cases_text.json":
     cargo run --release -p vqtrs-core --features embeddinggemma2 --example eg2_parity -- --reference "{{REFERENCE}}" --model-dir "{{MODEL_DIR}}" --cases "{{CASES}}"

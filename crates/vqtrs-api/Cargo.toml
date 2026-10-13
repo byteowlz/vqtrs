@@ -19,6 +19,8 @@ qwen3 = ["vqtrs-core/qwen3"]
 embeddinggemma2 = ["vqtrs-core/embeddinggemma2", "dep:base64"]
 embeddinggemma2-cuda = ["embeddinggemma2", "vqtrs-core/embeddinggemma2-cuda"]
 embeddinggemma2-metal = ["embeddinggemma2", "vqtrs-core/embeddinggemma2-metal"]
+embeddinggemma2-coreml = ["embeddinggemma2", "vqtrs-core/embeddinggemma2-coreml"]
+embeddinggemma2-mlx = ["embeddinggemma2", "vqtrs-core/embeddinggemma2-mlx"]
 # ONNX GPU/accel (ort execution providers).
 cuda = ["vqtrs-core/cuda"]
 tensorrt = ["vqtrs-core/tensorrt"]

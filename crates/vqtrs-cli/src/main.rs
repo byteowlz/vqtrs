@@ -218,6 +218,36 @@ fn try_daemon<B: Serialize>(route: &str, body: &B, enabled: bool) -> Option<Stri
     daemon::post_json(&socket, route, &payload).ok()
 }
 
+/// Native or daemon-default requests never retry a responding daemon's failure locally.
+fn try_embedding_daemon<B: Serialize>(
+    route: &str,
+    body: &B,
+    enabled: bool,
+    model: Option<&str>,
+) -> Result<Option<String>> {
+    let no_retry = model.is_none_or(|name| {
+        vqtrs_core::dense_models().iter().any(|m| {
+            m.code == name
+                && matches!(
+                    m.backend,
+                    vqtrs_core::Backend::EmbeddingGemma2CoreMl
+                        | vqtrs_core::Backend::EmbeddingGemma2Mlx
+                )
+        })
+    });
+    if !no_retry {
+        return Ok(try_daemon(route, body, enabled));
+    }
+    if !enabled {
+        return Ok(None);
+    }
+    let Some(socket) = daemon::live() else {
+        return Ok(None);
+    };
+    let payload = serde_json::to_string(body)?;
+    daemon::post_json(&socket, route, &payload).map(Some).context("embedding daemon request failed; no local retry (use --no-daemon only for an explicit fresh load)")
+}
+
 #[derive(Serialize)]
 struct InputBody<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -251,7 +281,12 @@ fn embed(args: EmbedArgs) -> Result<()> {
         model: args.model.as_deref(),
         input: &texts,
     };
-    if let Some(resp) = try_daemon("/v1/embeddings", &body, !args.no_daemon) {
+    if let Some(resp) = try_embedding_daemon(
+        "/v1/embeddings",
+        &body,
+        !args.no_daemon,
+        args.model.as_deref(),
+    )? {
         let parsed: DaemonEmbed = serde_json::from_str(&resp).context("parsing daemon response")?;
         let dimensions = parsed.data.first().map_or(0, |i| i.embedding.len());
         let output = EmbedOutput {

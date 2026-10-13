@@ -58,6 +58,8 @@ candle-nn = "0.11"
 # Already used by fastembed/ort; safe beta=1 GEMM for biased audio projection.
 ndarray = "=0.17.2"
 base64 = "=0.22.1"
+# Private tensor/worker directories for independently opt-in Apple runtimes.
+tempfile = "=3.25.0"
 # Hugging Face hub downloads for the EmbeddingGemma 2 backend; the same version
 # and TLS stack fastembed already uses, so the feature adds no new crates.
 hf-hub = { version = "0.5", default-features = false, features = ["ureq", "rustls-tls"] }

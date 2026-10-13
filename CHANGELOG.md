@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+### Added
+
+- Independent experimental `embeddinggemma2-coreml` and `embeddinggemma2-mlx`
+  features with explicit FP16/regular-BF16 artifact identities. Library/text/media
+  CLI/HTTP/UDS share canonical Rust preprocessing and bounded serialized native
+  helper ownership. CoreML512-token/10s and regular MLX8192-token/30s limits reject
+  overflow without truncation/fallback. CoreML short-audio drift remains explicit;
+  returned F32 vectors are host-normalized, not claimed F32-equivalent. Original
+  Candle and ONNX-only defaults remain unchanged. See `docs/embeddinggemma2-native.md`.
+
 ### Fixed
 
 - `VQTRS_ONNX_CPU_ONLY=1` explicitly bypasses compiled ONNX GPU providers and

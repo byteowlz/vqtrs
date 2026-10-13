@@ -4,7 +4,7 @@
 use axum::{Json, extract::State, http::StatusCode};
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use serde::{Deserialize, Serialize};
-use vqtrs_core::{Backend, EMBEDDING_GEMMA2_REPO, Engine, Gemma2Input};
+use vqtrs_core::{EMBEDDING_GEMMA2_REPO, Engine, Gemma2Input};
 
 use super::{ApiError, AppState, EmbedData, InFlight, check_batch_len, join_error};
 
@@ -94,9 +94,9 @@ pub async fn embeddings(
         let model_info = vqtrs_core::dense_models()
             .iter()
             .find(|m| m.code.eq_ignore_ascii_case(name));
-        if model_info.is_none_or(|m| m.backend != Backend::EmbeddingGemma2) {
+        if model_info.is_none_or(|m| !m.backend.supports_multimodal()) {
             return Err(bad_request(
-                "multimodal input requires google/embeddinggemma-2".into(),
+                "multimodal input requires an explicit EmbeddingGemma 2 model".into(),
             ));
         }
         let engine = state

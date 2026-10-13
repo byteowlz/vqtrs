@@ -1,8 +1,9 @@
 # Experimental Apple runtime extensions
 
 Status: user-approved staged integration of **every verified modality**, not a
-text-only rollout. M2 text measurements are recorded; native backends are still
-**not implemented or benchmark-qualified**.
+text-only rollout. Independently opt-in native workers are now implemented;
+see [installation and runtime contracts](embeddinggemma2-native.md). Qualification
+is bounded/experimental, not F32 equivalence or general hardware/task approval.
 Tracker: `vqtrs-s7zm`; targeted gate `vqtrs-2g84`; CoreML `vqtrs-8fe9`; MLX
 `vqtrs-6dqt`. The gate is bounded; exhaustive research is not a prerequisite.
 
@@ -14,12 +15,13 @@ when optional features are compiled. Existing CPU byte-identity and GPU toleranc
 contracts in [parity](embeddinggemma2-parity.md) and
 [GPU verification](embeddinggemma2-gpu.md) remain unchanged.
 
-Proposed independent Cargo features, to be wired after targeted qualification:
+Independent Cargo features (off by default):
 
 - `embeddinggemma2-coreml`: native CoreML models, not the existing `coreml` feature
   which registers ONNX Runtime's CoreML execution provider.
-- `embeddinggemma2-mlx`: MLX/Metal; BF16 and hardware-qualified W8A8 must be explicit,
-  distinct precision modes, not automatic quantization.
+- `embeddinggemma2-mlx`: regular MLX/Metal with original BF16 weights and
+  source-defined activation promotion. Turbo/W8A8 is not implemented; any future
+  hardware-qualified mode needs a distinct identity, never automatic quantization.
 
 A native CoreML text graph can target the dedicated Apple Neural Engine (ANE).
 The M5 Neural Accelerators used by the MLX project are inside the **GPU**, not

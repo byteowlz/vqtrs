@@ -14,6 +14,8 @@ mod image;
 mod jpeg;
 mod layer_norm;
 mod mel;
+#[cfg(any(feature = "embeddinggemma2-coreml", feature = "embeddinggemma2-mlx"))]
+pub mod native;
 mod ops;
 mod pocketfft;
 #[cfg(test)]

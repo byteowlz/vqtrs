@@ -9,7 +9,7 @@ use clap::{Args, ValueEnum};
 use serde::Serialize;
 use vqtrs_core::{EMBEDDING_GEMMA2_REPO, Engine, Gemma2Input};
 
-use super::{DaemonEmbed, EmbedItem, EmbedOutput, print_json, try_daemon};
+use super::{DaemonEmbed, EmbedItem, EmbedOutput, print_json, try_embedding_daemon};
 
 #[derive(Debug, Clone, Copy, ValueEnum)]
 enum Modality {
@@ -92,7 +92,9 @@ pub fn run(args: &MediaArgs) -> Result<()> {
             model: &args.model,
             input,
         };
-        if let Some(response) = try_daemon("/embeddings/multimodal", &body, true) {
+        if let Some(response) =
+            try_embedding_daemon("/embeddings/multimodal", &body, true, Some(&args.model))?
+        {
             let parsed: DaemonEmbed =
                 serde_json::from_str(&response).context("parsing daemon response")?;
             let output = EmbedOutput {

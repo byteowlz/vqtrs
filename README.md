@@ -17,8 +17,9 @@ images, 16 kHz WAV audio and video through the core library, CLI and HTTP API.
 CPU reference parity, CUDA/Metal acceleration and bounded FFmpeg decoding are
 optional. See [usage and numerical contract](docs/embeddinggemma2-parity.md),
 [GPU tests](docs/embeddinggemma2-gpu.md) and [video limits](docs/embeddinggemma2-video.md).
-Native [Apple runtime experiments](docs/embeddinggemma2-apple-runtimes.md) are
-benchmark-first proposals, not supported backends.
+Experimental [native Apple backends](docs/embeddinggemma2-native.md) add independent
+CoreML FP16 and regular MLX BF16 choices, including media. They require explicit
+runtime setup, have distinct model identities/limits and do not replace Candle F32.
 
 ## Quick start
 
@@ -215,6 +216,8 @@ with `--features qwen3`.
 | `qwen3-metal` | Qwen3 (candle Metal) | macOS |
 | `embeddinggemma2-cuda` | EmbeddingGemma 2 (candle CUDA, f32) | NVIDIA |
 | `embeddinggemma2-metal` | EmbeddingGemma 2 (candle Metal, f32) | macOS |
+| `embeddinggemma2-coreml` | Experimental native CoreML FP16 helper (not ONNX) | Apple Silicon/macOS15+ |
+| `embeddinggemma2-mlx` | Experimental regular MLX BF16 helper (not turbo) | Apple Silicon/macOS |
 
 ONNX, Qwen3 and EmbeddingGemma 2 acceleration are independent, so the installer
 composes them per host:
@@ -226,7 +229,8 @@ cargo install --path crates/vqtrs-cli --locked --features cuda,qwen3-cuda,embedd
 cargo install --path crates/vqtrs-cli --locked --features coreml,qwen3-metal,embeddinggemma2-metal
 ```
 
-The candle features (`qwen3-*`, `embeddinggemma2-*`) compile GPU kernels directly
+The candle GPU features (`qwen3-cuda`, `qwen3-metal`, `embeddinggemma2-cuda`,
+`embeddinggemma2-metal`) compile GPU kernels directly
 (need the CUDA toolkit / macOS at build time). The ort ONNX features register an execution
 provider that needs a matching GPU-enabled `onnxruntime` at runtime and falls
 back to CPU if it isn't present. `just install-all` auto-detects the host and

@@ -1,0 +1,162 @@
+{
+  "date": "2026-10-13",
+  "scope": "experimental native integration, not F32 equivalence/general qualification",
+  "host": {
+    "chip": "Apple M2 Ultra",
+    "unified_memory_gib": 192,
+    "os": "macOS26.6.2/25G83"
+  },
+  "runtime_versions": {
+    "python": "3.12.13",
+    "numpy": "2.5.3",
+    "coremltools": "9.0",
+    "mlx": "0.32.3"
+  },
+  "pins": {
+    "google": "914f7f89142e33e77833254d9c9b90c3cef7303b",
+    "coreml": "3f978ddf92cac9aa07eb2dcf6eb36cf450f3dba4",
+    "mlx_vlm": "4f4634bb813c0298cb1467bed2e957526c71d0b4"
+  },
+  "arms": {
+    "coreml-fp16-3f978ddf": {
+      "library": {
+        "cases": [
+          {
+            "case": "text",
+            "cosine_vs_f32": 0.9999803438251565,
+            "max_abs_vs_f32": 0.000786956399679184,
+            "norm": 0.999999971330302
+          },
+          {
+            "case": "image",
+            "cosine_vs_f32": 0.9999909308601634,
+            "max_abs_vs_f32": 0.0007503628730773926,
+            "norm": 1.000000030837784
+          },
+          {
+            "case": "short_audio",
+            "cosine_vs_f32": 0.9923737319988726,
+            "max_abs_vs_f32": 0.016338147222995758,
+            "norm": 0.9999999965985356
+          },
+          {
+            "case": "chirp_audio",
+            "cosine_vs_f32": 0.9999784225991273,
+            "max_abs_vs_f32": 0.0007546879351139069,
+            "norm": 0.9999999721107193
+          },
+          {
+            "case": "decoded_video",
+            "cosine_vs_f32": 0.9999899847082995,
+            "max_abs_vs_f32": 0.0009213835000991821,
+            "norm": 1.0000000066419248
+          }
+        ],
+        "f32_equivalence_claimed": false,
+        "limit_rejections": true,
+        "model": "vqtrs/embeddinggemma-2-coreml-fp16-3f978ddf",
+        "reference_device": "Metal(MetalDevice(DeviceId(1)))",
+        "repeated_exact": true
+      },
+      "transport": {
+        "model": "vqtrs/embeddinggemma-2-coreml-fp16-3f978ddf",
+        "synthetic_inputs_only": true,
+        "checks": {
+          "http": 8,
+          "uds": 4,
+          "local_cli": 4,
+          "rejected": 8
+        },
+        "worst_same_runtime_transport_max_abs": 0,
+        "native_vs_f32_equivalence_claimed": false
+      }
+    },
+    "mlx-regular-bf16-4f4634bb": {
+      "library": {
+        "additional_decoded_video_frames": 32,
+        "cases": [
+          {
+            "case": "text",
+            "cosine_vs_f32": 0.9999567604120038,
+            "max_abs_vs_f32": 0.0013248324394226074,
+            "norm": 1.0000000348800193
+          },
+          {
+            "case": "image",
+            "cosine_vs_f32": 0.9999398389340809,
+            "max_abs_vs_f32": 0.0012760590761899948,
+            "norm": 1.0000000331110457
+          },
+          {
+            "case": "short_audio",
+            "cosine_vs_f32": 0.9999419773456347,
+            "max_abs_vs_f32": 0.0014060363173484802,
+            "norm": 1.0000000342262796
+          },
+          {
+            "case": "chirp_audio",
+            "cosine_vs_f32": 0.9999790672994493,
+            "max_abs_vs_f32": 0.0008581057190895081,
+            "norm": 1.0000000386673944
+          },
+          {
+            "case": "decoded_video",
+            "cosine_vs_f32": 0.9999647406713039,
+            "max_abs_vs_f32": 0.0011133141815662384,
+            "norm": 1.0000000096144441
+          }
+        ],
+        "f32_equivalence_claimed": false,
+        "limit_rejections": true,
+        "model": "vqtrs/embeddinggemma-2-mlx-regular-bf16-4f4634bb",
+        "reference_device": "Metal(MetalDevice(DeviceId(1)))",
+        "repeated_exact": true
+      },
+      "transport": {
+        "model": "vqtrs/embeddinggemma-2-mlx-regular-bf16-4f4634bb",
+        "synthetic_inputs_only": true,
+        "checks": {
+          "http": 8,
+          "uds": 4,
+          "local_cli": 4,
+          "rejected": 8
+        },
+        "worst_same_runtime_transport_max_abs": 0,
+        "native_vs_f32_equivalence_claimed": false
+      }
+    }
+  },
+  "offline_gates": {
+    "rust_matrix": [
+      "default",
+      "embeddinggemma2-coreml",
+      "embeddinggemma2-mlx",
+      "coreml,qwen3-metal,embeddinggemma2-metal,embeddinggemma2-coreml,embeddinggemma2-mlx"
+    ],
+    "fmt_check": true,
+    "check": true,
+    "strict_all_target_clippy": true,
+    "workspace_tests": true,
+    "native_python_validation_tests": 4
+  },
+  "operations": {
+    "normal_reservation_gib": 16,
+    "lease_released": true,
+    "sushi_restored_http": 200,
+    "api_preserved_http": 200,
+    "eavs_preserved_http": 401,
+    "forum_preserved_http": 200,
+    "kev_remains_parked": true,
+    "installed_binaries_replaced": false,
+    "production_native_inference_claimed": false
+  },
+  "limitations": [
+    "CoreML300ms sine audio drift remains: cosine0.99237/maxabs0.01634",
+    "CoreML device preferences are not execution traces",
+    "M5/turbo/W8A8 not qualified or integrated",
+    "Optional Python environments and audited MLX source are explicitly provisioned; no automatic installs/checkpoint code",
+    "Abrupt SIGKILL may leave private temporary files",
+    "No independent subagent review; these are recorded self-verification checks",
+    "Original MacBook HTTP500/warning and release-assets/deployment issues remain separate"
+  ]
+}

@@ -36,7 +36,11 @@ After any change: `cargo fmt`, then `cargo clippy --workspace --all-targets`, th
 
 Default build is ONNX-only. `qwen3` adds the candle Qwen3 backend. GPU is
 per-backend: `cuda`/`tensorrt`/`coreml`/`directml` (ONNX, ort EPs) and
-`qwen3-cuda`/`qwen3-metal` (Qwen3, candle). See README for the matrix.
+`qwen3-cuda`/`qwen3-metal` (Qwen3, candle). Experimental independent
+`embeddinggemma2-coreml`/`embeddinggemma2-mlx` use owned optional native workers,
+not default Python/ONNX runtime replacement. Setup, pinned assets, explicit
+precision/context/audio limits and known drift: `docs/embeddinggemma2-native.md`.
+See README for the matrix.
 
 ## Conventions
 

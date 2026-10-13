@@ -11,6 +11,8 @@ use crate::cache::model_cache_dir;
 #[cfg(feature = "qwen3")]
 use crate::catalog::QWEN3_MAX_LENGTH;
 use crate::catalog::{Backend, Resolved, hf_repo, resolve_dense};
+#[cfg(any(feature = "embeddinggemma2-coreml", feature = "embeddinggemma2-mlx"))]
+use crate::embedding_gemma2::native::{Native, Runtime};
 #[cfg(feature = "embeddinggemma2")]
 use crate::embedding_gemma2::{EmbeddingGemma2, Gemma2Input};
 use crate::error::{Result, VqtrsError};
@@ -27,6 +29,8 @@ enum Inner {
     Qwen3(Box<Qwen3TextEmbedding>),
     #[cfg(feature = "embeddinggemma2")]
     EmbeddingGemma2(Box<EmbeddingGemma2>),
+    #[cfg(any(feature = "embeddinggemma2-coreml", feature = "embeddinggemma2-mlx"))]
+    Native(Box<Native>),
 }
 
 /// A loaded embedding model.
@@ -97,6 +101,11 @@ impl Engine {
                     tokenizer: OnceLock::new(),
                 })
             }
+            #[cfg(any(feature = "embeddinggemma2-coreml", feature = "embeddinggemma2-mlx"))]
+            Resolved::Native {
+                backend,
+                dimensions,
+            } => Self::load_native(backend, dimensions),
             #[cfg(feature = "embeddinggemma2")]
             Resolved::EmbeddingGemma2 { repo, dimensions } => {
                 let inner = EmbeddingGemma2::from_hf(&repo)?;
@@ -109,6 +118,27 @@ impl Engine {
                 })
             }
         }
+    }
+
+    #[cfg(any(feature = "embeddinggemma2-coreml", feature = "embeddinggemma2-mlx"))]
+    fn load_native(backend: Backend, dimensions: usize) -> Result<Self> {
+        let runtime = match backend {
+            Backend::EmbeddingGemma2CoreMl => Runtime::CoreMl,
+            Backend::EmbeddingGemma2Mlx => Runtime::Mlx,
+            _ => {
+                return Err(VqtrsError::Backend(
+                    "invalid native backend resolution".into(),
+                ));
+            }
+        };
+        let inner = Native::load(runtime)?;
+        Ok(Self {
+            model: runtime.identity().to_owned(),
+            dimensions,
+            backend: runtime.backend(),
+            inner: Inner::Native(Box::new(inner)),
+            tokenizer: OnceLock::new(),
+        })
     }
 
     /// Embed a single string.
@@ -141,6 +171,8 @@ impl Engine {
             Inner::Qwen3(m) => m.embed(texts).map_err(|e| backend_err(e.into())),
             #[cfg(feature = "embeddinggemma2")]
             Inner::EmbeddingGemma2(m) => texts.iter().map(|text| m.embed_text(text)).collect(),
+            #[cfg(any(feature = "embeddinggemma2-coreml", feature = "embeddinggemma2-mlx"))]
+            Inner::Native(m) => m.texts(texts),
         }
     }
 
@@ -155,13 +187,15 @@ impl Engine {
     /// decoding, tokenization or backend inference fails.
     #[cfg(feature = "embeddinggemma2")]
     pub fn embed_multimodal(&self, inputs: &[Gemma2Input<'_>]) -> Result<Vec<Vec<f32>>> {
-        let Inner::EmbeddingGemma2(m) = &self.inner else {
-            return Err(VqtrsError::Backend(format!(
-                "model `{}` does not support multimodal embedding; load `google/embeddinggemma-2` to use embed_multimodal",
+        match &self.inner {
+            Inner::EmbeddingGemma2(m) => inputs.iter().map(|input| m.embed(*input)).collect(),
+            #[cfg(any(feature = "embeddinggemma2-coreml", feature = "embeddinggemma2-mlx"))]
+            Inner::Native(m) => inputs.iter().map(|input| m.embed(*input)).collect(),
+            _ => Err(VqtrsError::Backend(format!(
+                "model `{}` does not support multimodal embedding; select an explicit EmbeddingGemma 2 model",
                 self.model
-            )));
-        };
-        inputs.iter().map(|input| m.embed(*input)).collect()
+            ))),
+        }
     }
 
     /// The resolved model name this engine was loaded with.
@@ -188,6 +222,10 @@ impl Engine {
     /// caller can fall back to an estimate.
     #[must_use]
     pub fn count_tokens(&self, texts: &[String]) -> Option<usize> {
+        #[cfg(any(feature = "embeddinggemma2-coreml", feature = "embeddinggemma2-mlx"))]
+        if let Inner::Native(m) = &self.inner {
+            return m.count_tokens(texts);
+        }
         let tokenizer = self
             .tokenizer
             .get_or_init(|| load_tokenizer(&self.model))

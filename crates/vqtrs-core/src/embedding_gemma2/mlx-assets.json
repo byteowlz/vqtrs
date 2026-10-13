@@ -1,0 +1,21 @@
+{
+  "revision": "914f7f89142e33e77833254d9c9b90c3cef7303b",
+  "files": {
+    "config.json": {
+      "size": 4455,
+      "sha256": "b8f1e9931b57fbc054acdb445c41765d55b0074c58d145fa82839941ad1b5bb3"
+    },
+    "tokenizer.json": {
+      "size": 32170510,
+      "sha256": "4d777ef5bdc1aa36227abdfb77c3e49e7b9c892d16e1b6bda41c393504828be4"
+    },
+    "processor_config.json": {
+      "size": 1788,
+      "sha256": "168f6a08522f3ce5dea596d94d003af2fd691742d4f41fe1f9d8cce76bfbf69c"
+    },
+    "model.safetensors": {
+      "size": 1488915288,
+      "sha256": "197a32965d4b1105faf060417baa899e193fb73cd401f42ec9295234d5553d79"
+    }
+  }
+}

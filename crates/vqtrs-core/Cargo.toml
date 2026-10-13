@@ -41,6 +41,10 @@ embeddinggemma2 = [
 
 embeddinggemma2-cuda = ["embeddinggemma2", "candle-core/cuda", "candle-nn/cuda"]
 embeddinggemma2-metal = ["embeddinggemma2", "candle-core/metal", "candle-nn/metal"]
+# Native frameworks run in bounded optional workers; neither enables the other
+# or changes the original Candle model/device selection.
+embeddinggemma2-coreml = ["embeddinggemma2", "dep:tempfile"]
+embeddinggemma2-mlx = ["embeddinggemma2", "dep:tempfile"]
 
 [dependencies]
 fastembed.workspace = true
@@ -49,6 +53,7 @@ candle-core = { workspace = true, optional = true }
 candle-nn = { workspace = true, optional = true }
 hf-hub = { workspace = true, optional = true }
 image = { workspace = true, optional = true }
+tempfile = { workspace = true, optional = true }
 serde = { workspace = true, optional = true }
 serde_json = { workspace = true, optional = true }
 # Direct ort handle for constructing execution providers; pinned to fastembed's
@@ -70,4 +75,8 @@ ndarray = { workspace = true, optional = true, features = ["blas"] }
 
 [[example]]
 name = "eg2_parity"
+required-features = ["embeddinggemma2"]
+
+[[example]]
+name = "eg2_native_smoke"
 required-features = ["embeddinggemma2"]
