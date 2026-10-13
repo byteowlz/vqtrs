@@ -3,7 +3,7 @@ name: Platform Archives
 on:
   push:
     branches: [main]
-    paths: ['crates/**', 'Cargo.*', 'scripts/ci/**', '.github/workflows/**']
+    paths: ['crates/**', 'Cargo.*', 'rust-toolchain.toml', 'scripts/ci/**', '.github/workflows/**']
   pull_request:
   workflow_dispatch:
     inputs:
@@ -45,8 +45,9 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ inputs.source_ref || github.sha }}
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@master
         with:
+          toolchain: '1.97.0'
           targets: ${{ matrix.target }}
           components: clippy,rustfmt
       - uses: astral-sh/setup-uv@v6
@@ -88,6 +89,7 @@ jobs:
           fi
           cp LICENSE archive/
           git rev-parse HEAD > archive/source-revision.txt
+          rustc --version --verbose > archive/rustc-version.txt
           printf '%s\n' 'features=default (ONNX-only)' "target=$TARGET" > archive/build-profile.txt
           if [ "$CUSTOM_ORT" = true ]; then
             cp -P "$ORT_LIB_PATH"/libonnxruntime*.dylib archive/

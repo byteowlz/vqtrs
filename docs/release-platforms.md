@@ -5,6 +5,12 @@ ONNX-only archives: Linux x86_64, Apple Silicon, Intel macOS, and Windows x86_64
 Main/PR/manual runs upload CI artifacts only; they do not create a release.
 `Release` reuses those checks and publishes only an existing annotated version
 matching `Cargo.toml`, after all four extracted-archive smokes and checksums pass.
+Rust/rustfmt/Clippy are pinned to the already-qualified **1.97.0** toolchain
+(`rust-toolchain.toml` and CI), and its full identity is included in each archive.
+Floating stable1.99 added new style rules, including rewriting numerical-port
+chunk/bit-width code. A toolchain upgrade is a separately qualified change, not
+an automatic release-time arithmetic refactor. Workspace lint levels remain
+unchanged/strict; passing1.97 checks is not claimed to pass newer Clippy.
 Manual release dispatch defaults to **not publishing**. No registry publication.
 
 ## Transports

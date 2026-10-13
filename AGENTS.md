@@ -30,7 +30,10 @@ root `Cargo.toml`). `cargo clippy --workspace --all-targets` must be clean.
   identifiers (add domain terms to `clippy.toml` `doc-valid-idents`).
 
 After any change: `cargo fmt`, then `cargo clippy --workspace --all-targets`, then
-`cargo test` (engine tests are in `vqtrs-core`, no network).
+`cargo test` (engine tests are in `vqtrs-core`, no network). The qualified compiler
+is Rust/rustfmt/Clippy 1.97.0 (`rust-toolchain.toml` and platform CI); retain strict
+lint levels and upgrade the toolchain as an explicit numerical/transport-qualified
+change, not by silently following floating stable during release packaging.
 
 ## Build features (all off by default)
 
