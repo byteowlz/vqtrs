@@ -615,7 +615,7 @@ mod tests {
             .expect("EmbeddingGemma 2 is always listed");
         assert_eq!(model.backend, Backend::EmbeddingGemma2);
         assert_eq!(model.dimensions, 768);
-        assert!(model.variant.is_empty());
+        assert_eq!(model.variant, "");
         assert_eq!(hf_repo(model.code), Some("google/embeddinggemma-2"));
         assert_eq!(hf_repo(""), None);
     }

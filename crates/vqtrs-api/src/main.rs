@@ -324,11 +324,11 @@ struct InFlight(tokio::sync::OwnedSemaphorePermit);
 impl FromRequestParts<AppState> for InFlight {
     type Rejection = ApiError;
 
-    async fn from_request_parts(
+    fn from_request_parts(
         _parts: &mut axum::http::request::Parts,
         state: &AppState,
-    ) -> Result<Self, Self::Rejection> {
-        acquire_permit(state).map(Self)
+    ) -> impl Future<Output = Result<Self, Self::Rejection>> + Send {
+        std::future::ready(acquire_permit(state).map(Self))
     }
 }
 

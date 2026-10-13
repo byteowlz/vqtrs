@@ -421,7 +421,7 @@ mod tests {
     #[test]
     fn empty_and_short_audio_have_no_valid_frames() {
         let frontend = MelFrontEnd::new(MelSettings::default(), &Device::Cpu).unwrap();
-        assert!(frontend.features(&[]).unwrap().features.is_empty());
+        assert_eq!(frontend.features(&[]).unwrap().features, Vec::<f32>::new());
         let short = frontend.features(&[0.0; 100]).unwrap();
         assert!(short.mask.iter().all(|&v| !v));
         assert!(
