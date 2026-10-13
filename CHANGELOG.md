@@ -16,6 +16,14 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
+- Windows no longer compiles unconditional Unix socket imports/listeners. API
+  startup is TCP-only by default; explicit unsupported socket requests fail
+  before model loading and CLI inference stays local. Unix warm UDS is retained
+  with policy/listener regressions. Native platform CI verifies extracted
+  ONNX-only archives; Intel macOS uses a pinned matching API24 CPU runtime build
+  bundled with executable-relative linking and notices. Publication requires all
+  four smokes/checksums and a matching immutable new version/tag; `v0.2.0` is not
+  moved or relabeled. See `docs/release-platforms.md` for evidence boundaries.
 - `VQTRS_ONNX_CPU_ONLY=1` explicitly bypasses compiled ONNX GPU providers and
   selects CPU for dense/sparse/M3/reranking. It offers a workaround for noisy
   macOS CoreML execution without hiding diagnostics or disabling Candle

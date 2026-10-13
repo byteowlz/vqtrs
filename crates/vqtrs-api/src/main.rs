@@ -5,12 +5,13 @@ mod config;
 #[cfg(feature = "embeddinggemma2")]
 mod multimodal;
 mod registry;
+mod socket;
 
 use std::net::{IpAddr, SocketAddr};
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 
 use crate::config::ServerConfig;
 use crate::registry::Registry;
@@ -61,11 +62,12 @@ async fn try_main() -> Result<()> {
             .unwrap_or_else(|_| IpAddr::from([127, 0, 0, 1]))
     });
     let port = cli.port.unwrap_or(cfg.port);
-    let no_socket = cli.no_socket || cfg.no_socket;
-    let socket_path = cli
-        .socket
-        .or_else(|| (!cfg.socket.is_empty()).then(|| PathBuf::from(&cfg.socket)))
-        .unwrap_or_else(default_socket_path);
+    let socket_path = socket::select(
+        cfg!(unix),
+        cli.no_socket || cfg.no_socket,
+        cli.socket
+            .or_else(|| (!cfg.socket.is_empty()).then(|| PathBuf::from(&cfg.socket))),
+    )?;
 
     let max_loaded = cfg.max_loaded;
     let warm = cfg.warm;
@@ -134,20 +136,8 @@ async fn try_main() -> Result<()> {
         .layer(TraceLayer::new_for_http())
         .with_state(state);
 
-    // Local channel: a Unix-domain socket serving the same routes. No TCP, no
-    // port management, filesystem-permission auth, and the model stays warm.
-    if !no_socket {
-        let _ = std::fs::remove_file(&socket_path);
-        let uds = tokio::net::UnixListener::bind(&socket_path)
-            .with_context(|| format!("binding unix socket {}", socket_path.display()))?;
-        info!("serving on unix:{}", socket_path.display());
-        let uds_app = app.clone();
-        tokio::spawn(async move {
-            if let Err(err) = axum::serve(uds, uds_app).await {
-                log::error!("unix socket server error: {err}");
-            }
-        });
-    }
+    // Unix platforms keep the warm local channel; other platforms are TCP-only.
+    socket::serve(&app, socket_path)?;
 
     let addr = SocketAddr::new(host, port);
     info!("serving on http://{addr}");
@@ -156,16 +146,6 @@ async fn try_main() -> Result<()> {
     axum::serve(listener, app).await?;
 
     Ok(())
-}
-
-/// Default local socket path: `$XDG_RUNTIME_DIR/vqtrs.sock` when that directory
-/// exists, else `<temp-dir>/vqtrs.sock`.
-fn default_socket_path() -> PathBuf {
-    std::env::var_os("XDG_RUNTIME_DIR")
-        .map(PathBuf::from)
-        .filter(|p| p.is_dir())
-        .unwrap_or_else(std::env::temp_dir)
-        .join("vqtrs.sock")
 }
 
 #[derive(Debug, Parser)]

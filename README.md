@@ -84,8 +84,8 @@ tools.
 
 **Warm by default:** if a `vqtrs service` daemon is running, `embed` / `sparse` /
 `m3` / `rerank` transparently route to it over its Unix socket — the model stays
-loaded, so repeated calls skip the per-invocation load. Passing an explicit
-`--model` (or `--no-daemon`) forces in-process loading instead.
+loaded, so repeated calls skip the per-invocation load. `--model` chooses the
+model; `--no-daemon` explicitly forces in-process loading.
 
 ### Server
 
@@ -119,6 +119,9 @@ curl --unix-socket "$XDG_RUNTIME_DIR/vqtrs.sock" \
 ```
 
 Override with `--socket <path>` / `VQTRS_SOCKET`, or disable with `--no-socket`.
+Windows is TCP-only by default; CLI inference is local, with explicit socket
+requests rejected. See [release platform checks](docs/release-platforms.md) for
+native-target tests and Intel macOS runtime packaging.
 
 **Multi-model gateway:** the server honours each request's `model` field —
 models load on demand and stay warm, so a single server serves many models (and

@@ -88,6 +88,10 @@ clean:
 test-installer:
     bash scripts/test-install-vqtrs.sh
 
+# Offline contract checks for the native archive probe (not inference proof)
+test-archive-contract:
+    uv run --no-project python -I scripts/ci/test_archive_smoke.py
+
 # Run all tests
 test: test-installer
     cargo test --workspace

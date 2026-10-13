@@ -1,0 +1,139 @@
+name: Platform Archives
+
+on:
+  push:
+    branches: [main]
+    paths: ['crates/**', 'Cargo.*', 'scripts/ci/**', '.github/workflows/**']
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      source_ref:
+        description: Source ref to verify (no release publication)
+        default: main
+        type: string
+  workflow_call:
+    inputs:
+      source_ref:
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: Archive ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+          - target: aarch64-apple-darwin
+            os: macos-15
+          - target: x86_64-apple-darwin
+            os: macos-15-intel
+            custom_ort: true
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.source_ref || github.sha }}
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+          components: clippy,rustfmt
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: '3.12'
+      - name: Native Intel CPU runtime (no rc.12 prebuilt)
+        if: matrix.custom_ort
+        shell: bash
+        run: bash scripts/ci/build-intel-ort.sh "$RUNNER_TEMP/vqtrs-ort"
+      - name: Format, check, lint and offline tests
+        shell: bash
+        run: |
+          cargo fmt --all -- --check
+          cargo check --locked --workspace --target '${{ matrix.target }}'
+          cargo clippy --locked --workspace --all-targets --target '${{ matrix.target }}'
+          cargo test --locked --workspace --target '${{ matrix.target }}'
+          uv run --no-project python -I scripts/ci/test_archive_smoke.py
+      - name: Windows optional CPU multimodal build and tests
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          cargo build --locked --workspace --features embeddinggemma2
+          cargo clippy --locked --workspace --all-targets --features embeddinggemma2
+          cargo test --locked --workspace --features embeddinggemma2
+      - name: Build default ONNX-only binaries
+        shell: bash
+        run: cargo build --locked --release --workspace --target '${{ matrix.target }}'
+      - name: Assemble relocatable archive directory
+        shell: bash
+        env:
+          TARGET: ${{ matrix.target }}
+          CUSTOM_ORT: ${{ matrix.custom_ort }}
+        run: |
+          mkdir -p archive
+          if [ "$RUNNER_OS" = Windows ]; then
+            cp "target/$TARGET/release/vqtrs.exe" "target/$TARGET/release/vqtrs-api.exe" archive/
+          else
+            cp "target/$TARGET/release/vqtrs" "target/$TARGET/release/vqtrs-api" archive/
+          fi
+          cp LICENSE archive/
+          git rev-parse HEAD > archive/source-revision.txt
+          printf '%s\n' 'features=default (ONNX-only)' "target=$TARGET" > archive/build-profile.txt
+          if [ "$CUSTOM_ORT" = true ]; then
+            cp -P "$ORT_LIB_PATH"/libonnxruntime*.dylib archive/
+            cp "$ORT_LIB_PATH"/ONNXRuntime-* archive/
+          fi
+      - name: Package, checksum and re-extract
+        shell: bash
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          LABEL=$(git describe --tags --exact-match 2>/dev/null || git rev-parse --short=12 HEAD)
+          case "$LABEL" in *[!a-zA-Z0-9._-]*) echo 'Unsafe archive label'; exit 1;; esac
+          mkdir extracted
+          if [ "$RUNNER_OS" = Windows ]; then
+            FILE="vqtrs-$LABEL-$TARGET.zip"
+            (cd archive && 7z a "../$FILE" ./*)
+            7z x "$FILE" -oextracted
+          else
+            FILE="vqtrs-$LABEL-$TARGET.tar.gz"
+            tar -czf "$FILE" -C archive .
+            tar -xzf "$FILE" -C extracted
+          fi
+          uv run --no-project python -I -c 'import hashlib,sys; from pathlib import Path; p=Path(sys.argv[1]); print(hashlib.sha256(p.read_bytes()).hexdigest(),p.name,sep="  ")' "$FILE" > "checksums-$TARGET.txt"
+      - name: Extracted archive inference and transports
+        shell: bash
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          if [ "$RUNNER_OS" = Windows ]; then EXT=.exe; else EXT=; fi
+          uv run --no-project python -I scripts/ci/archive_smoke.py --cli "extracted/vqtrs$EXT" --api "extracted/vqtrs-api$EXT" --work-dir "$RUNNER_TEMP/smoke" | tee "archive-smoke-$TARGET.json"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vqtrs-${{ matrix.target }}
+          path: |
+            vqtrs-*.tar.gz
+            vqtrs-*.zip
+            archive-smoke-*.json
+            checksums-*.txt
+          if-no-files-found: error
+      - name: Keep failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: failure-${{ matrix.target }}
+          path: |
+            archive-smoke-*.json
+            ${{ runner.temp }}/smoke/api.log
+            ${{ runner.temp }}/vqtrs-ort/architecture.txt
+            ${{ runner.temp }}/vqtrs-ort/build/Release/CMakeCache.txt

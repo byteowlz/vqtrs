@@ -24,6 +24,7 @@ const DEFAULT_M3_MODEL: &str = "BAAI/bge-m3";
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
+    daemon::validate_override(cfg!(unix), std::env::var_os("VQTRS_SOCKET").as_deref())?;
     match cli.command {
         Command::Embed(args) => embed(args),
         #[cfg(feature = "embeddinggemma2")]
