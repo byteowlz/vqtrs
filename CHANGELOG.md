@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+## [0.3.0] - 2026-10-13
+
+New optional public backend variants justify a minor pre-1.0 version rather than
+relabeling immutable `v0.2.0`. Downloadable archives remain ONNX-only; optional
+GPU/native backends require a feature-enabled source build and explicit setup.
+
 ### Added
 
 - Independent experimental `embeddinggemma2-coreml` and `embeddinggemma2-mlx`
@@ -16,6 +22,10 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
+- Reproducible release compilation with qualified Rust/rustfmt/Clippy 1.97.0,
+  unchanged strict lint levels and compiler identity in every archive. Four
+  native candidate archives passed real ONNX inference, CLI/HTTP/Unix UDS where
+  supported, batch/pre-body load shedding/recovery and checksum checks.
 - Windows no longer compiles unconditional Unix socket imports/listeners. API
   startup is TCP-only by default; explicit unsupported socket requests fail
   before model loading and CLI inference stays local. Unix warm UDS is retained

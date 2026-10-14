@@ -54,6 +54,7 @@ jobs:
           for target in x86_64-unknown-linux-gnu aarch64-apple-darwin x86_64-apple-darwin x86_64-pc-windows-msvc; do
             test -s "checksums-$target.txt"
             test -s "archive-smoke-$target.json"
+            jq -e --arg version "${TAG#v}" '.status == "passed" and .version == $version and .dimensions == 384 and .finite_unit_norm == true and .http_cli_parity == true and .prebody_shedding_retry_after == true' "archive-smoke-$target.json"
             sha256sum -c "checksums-$target.txt"
             if [ "$target" = x86_64-pc-windows-msvc ]; then EXT=zip; else EXT=tar.gz; fi
             test -s "vqtrs-$TAG-$target.$EXT"
@@ -64,12 +65,11 @@ jobs:
           tag_name: ${{ inputs.tag || github.ref_name }}
           generate_release_notes: true
           body: |
-            Archives are default ONNX-only builds, not GPU/native-Gemma builds.
-            Each native runner verifies relocated binaries, real ONNX inference,
-            CLI/HTTP transports and Unix sockets where supported. Intel macOS
-            bundles the pinned ONNX Runtime 1.24.2 CPU shared library and notices.
-            Windows is TCP-only; CLI inference is local. Optional backends require
-            a feature-enabled source build; native Apple workers need private setup.
+            Default ONNX-only archives; optional GPU/native backends require source builds.
+            Native runners verify relocated inference, CLI/HTTP and Unix UDS where supported.
+            Intel macOS13+ includes pinned CPU ONNX Runtime1.24.2/API24, reviewed
+            upstream compile-only Clang guard fix and notices. Rust/Clippy1.97.0 is pinned.
+            Windows uses TCP API/local CLI. Native Apple workers need private setup.
           files: |
             artifacts/*.tar.gz
             artifacts/*.zip

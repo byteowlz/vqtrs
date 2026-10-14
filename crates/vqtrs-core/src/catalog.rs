@@ -1,12 +1,16 @@
 //! Model catalog and name resolution.
 //!
-//! Three backends are exposed behind one catalog:
+//! Five backends are exposed behind one catalog:
 //! - [`Backend::Onnx`] — fastembed/ONNX models selected via the
 //!   [`fastembed::EmbeddingModel`] enum.
 //! - [`Backend::Qwen3`] — Qwen3-Embedding models run through the candle
 //!   backend, selected by their Hugging Face repository id.
-//! - [`Backend::EmbeddingGemma2`] — EmbeddingGemma 2 text, image and audio
+//! - [`Backend::EmbeddingGemma2`] — EmbeddingGemma 2 text, image, audio and video
 //!   embeddings run through vqtrs' candle backend.
+//! - [`Backend::EmbeddingGemma2CoreMl`] — independently opt-in experimental
+//!   native `CoreML` FP16 embeddings.
+//! - [`Backend::EmbeddingGemma2Mlx`] — independently opt-in experimental regular
+//!   MLX BF16 embeddings.
 //!
 //! Names resolve either by Hugging Face `code` (e.g.
 //! `"intfloat/multilingual-e5-small"`) or by fastembed `variant`
