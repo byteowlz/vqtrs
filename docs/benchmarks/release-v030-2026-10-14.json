@@ -1,0 +1,106 @@
+{
+  "date": "2026-10-14",
+  "release": "https://github.com/byteowlz/vqtrs/releases/tag/v0.3.0",
+  "published_at": "2026-10-14T09:16:01Z",
+  "tag": "v0.3.0",
+  "source_revision": "9c7adf9093cea854933c64501f95970fd356051b",
+  "ci_run": "https://github.com/byteowlz/vqtrs/actions/runs/38535279880",
+  "status": "passed",
+  "publication": "nine GitHub assets: four archives, checksums, four real smoke reports",
+  "rust_toolchain": "1.97.0",
+  "build_profile": "default ONNX-only",
+  "local_post_download_verification": [
+    "All four downloaded archive hashes match published checksums and asset sizes.",
+    "All four archived source revisions match annotated tag9c7adf9; compiler1.97.0/default profile checked.",
+    "All four published smoke reports pass and report actual binary version0.3.0.",
+    "Apple Silicon extracted CLI/API --version returned0.3.0; no local inference/model loading."
+  ],
+  "intel_ort": {
+    "version": "1.24.2",
+    "api": 24,
+    "source": "058787ceead760166e3c50a0a4cba8a833a6f53f",
+    "compile_fix": "c7c939ff1e961284dd3b6f720e7ec980f8d6d331",
+    "patch_sha256": "cca159b2919d7070ff5d7965d4bdd0558893cc93a9a7f46dadbb39077440b336",
+    "provider": "CPU",
+    "relocation": "native extracted-archive inference with DYLD_LIBRARY_PATH removed",
+    "minimum_macos": "13.0"
+  },
+  "platforms": [
+    {
+      "target": "aarch64-apple-darwin",
+      "archive": "vqtrs-v0.3.0-aarch64-apple-darwin.tar.gz",
+      "sha256": "a8078b6b8c86b45b18d72da207ae1ed82ca7b8578dd382371930848aba2e8e0a",
+      "smoke": {
+        "status": "passed",
+        "version": "0.3.0",
+        "model": "Qdrant/all-MiniLM-L6-v2-onnx",
+        "dimensions": 384,
+        "finite_unit_norm": true,
+        "http_cli_parity": true,
+        "unix_transport": "passed",
+        "batch_limit": 2,
+        "inflight_limit": 1,
+        "prebody_shedding_retry_after": true
+      }
+    },
+    {
+      "target": "x86_64-apple-darwin",
+      "archive": "vqtrs-v0.3.0-x86_64-apple-darwin.tar.gz",
+      "sha256": "c84162d56021ce7999024ea6891e8f6256ab4238f0440e4865281cf7ba248327",
+      "smoke": {
+        "status": "passed",
+        "version": "0.3.0",
+        "model": "Qdrant/all-MiniLM-L6-v2-onnx",
+        "dimensions": 384,
+        "finite_unit_norm": true,
+        "http_cli_parity": true,
+        "unix_transport": "passed",
+        "batch_limit": 2,
+        "inflight_limit": 1,
+        "prebody_shedding_retry_after": true
+      }
+    },
+    {
+      "target": "x86_64-pc-windows-msvc",
+      "archive": "vqtrs-v0.3.0-x86_64-pc-windows-msvc.zip",
+      "sha256": "06c015195a704c510ef7bde9d01ebb08bd72806c071d11f016df353b7d0a2961",
+      "smoke": {
+        "status": "passed",
+        "version": "0.3.0",
+        "model": "Qdrant/all-MiniLM-L6-v2-onnx",
+        "dimensions": 384,
+        "finite_unit_norm": true,
+        "http_cli_parity": true,
+        "unix_transport": "explicitly unsupported",
+        "batch_limit": 2,
+        "inflight_limit": 1,
+        "prebody_shedding_retry_after": true
+      }
+    },
+    {
+      "target": "x86_64-unknown-linux-gnu",
+      "archive": "vqtrs-v0.3.0-x86_64-unknown-linux-gnu.tar.gz",
+      "sha256": "c9eb9eb704f5dbd55faaa127e4d41abd3a602a8de063d4efa98a4e1e65e4bf6d",
+      "smoke": {
+        "status": "passed",
+        "version": "0.3.0",
+        "model": "Qdrant/all-MiniLM-L6-v2-onnx",
+        "dimensions": 384,
+        "finite_unit_norm": true,
+        "http_cli_parity": true,
+        "unix_transport": "passed",
+        "batch_limit": 2,
+        "inflight_limit": 1,
+        "prebody_shedding_retry_after": true
+      }
+    }
+  ],
+  "gaps": [
+    "Self-verification on native CI images, not independent review or all OS installations.",
+    "One named ONNX model; no whole-catalog/cross-platform numerical-equivalence/GPU/native-worker archive qualification.",
+    "Windows optional CPU Gemma build/lint/offline tests pass, not full media/model inference.",
+    "Optional source CoreML/MLX workers remain experimental FP16/BF16 with explicit private setup; not bundled in default archives.",
+    "Immutable v0.2.0 remainsa30f2f0; v0.3.0 has a distinct annotated tag.",
+    "No registry upload or running-server/installed-binary replacement; installed API/MacBook/lab readiness remains separate."
+  ]
+}

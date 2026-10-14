@@ -39,9 +39,25 @@ tests, not full media/model inference. Default ONNX smoke proves finite normaliz
 and Unix UDS (Windows explicitly rejects sockets). This is self-verification on
 CI images, not universal OS/catalog/GPU/native-worker qualification.
 
-These are commit-addressed CI artifacts with the manifest's current 0.2.0 version,
-**not published v0.2.0 assets**. No new tag/release or installed upgrade occurred.
-A corrective release needs a new matching manifest version/annotated tag.
+Those were commit-addressed CI artifacts with the then-current 0.2.0 manifest,
+**not published v0.2.0 assets**. They justified the new release below, not replacing
+or relabeling the original immutable tag.
+
+## Published v0.3.0
+
+[v0.3.0](https://github.com/byteowlz/vqtrs/releases/tag/v0.3.0) was published on
+2026-10-14 at annotated source `9c7adf9`. Its own
+[release run](https://github.com/byteowlz/vqtrs/actions/runs/38535279880) passed all
+four native jobs and pre-publication version/checksum gates. All nine published
+assets (four archives, checksums, four smoke reports) were downloaded; hashes,
+actual 0.3.0 versions, source revisions and compiler/default profiles were verified.
+[Published evidence](benchmarks/release-v030-2026-10-14.json) records exact hashes
+and gaps. No installed binary/server replacement or registry upload occurred.
+
+Checksum manifests may mix LF/CRLF because they are authored on native platforms;
+normalize text line endings when parsing, never archive bytes. The tag's changelog
+retains its preparation date; this current page/changelog records the actual
+2026-10-14 publication date without rewriting any immutable tag.
 
 ## Intel macOS runtime
 

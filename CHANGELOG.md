@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
-## [0.3.0] - 2026-10-13
+## [0.3.0] - 2026-10-14
 
 New optional public backend variants justify a minor pre-1.0 version rather than
 relabeling immutable `v0.2.0`. Downloadable archives remain ONNX-only; optional
