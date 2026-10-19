@@ -300,6 +300,27 @@ impl EmbeddingGemma2 {
         self.embed(Gemma2Input::Text(text))
     }
 
+    /// Embed complete text without downloading intermediate token states or the pooled vector.
+    ///
+    /// The returned normalized F32 tensor stays on the device supplied to `from_dir_on`.
+    /// This additive seam permits a downstream learned head on the same device; existing
+    /// vector-returning APIs and their finite-value checks are unchanged. Callers must
+    /// validate the final readout, since this method does not copy tensor values to the host.
+    ///
+    /// # Errors
+    ///
+    /// Returns tokenization, complete-sequence admission or device/operator errors.
+    pub fn embed_text_tensor(&self, text: &str) -> Result<Tensor> {
+        let ids = self.tokenize(text)?;
+        check_sequence_length(ids.len())?;
+        let run = || -> candle_core::Result<Tensor> {
+            let ids = Tensor::new(ids.as_slice(), &self.device)?;
+            let embeds = self.text.embed(&ids)?;
+            mean_pool_normalize(&self.text.forward(&embeds, None)?)
+        };
+        run().map_err(backend)
+    }
+
     /// Run the model on one input, optionally keeping every text layer output.
     ///
     /// # Errors
