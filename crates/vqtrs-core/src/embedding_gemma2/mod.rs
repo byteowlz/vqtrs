@@ -12,7 +12,7 @@ mod audio;
 mod config;
 mod image;
 mod jpeg;
-mod layer_norm;
+pub mod layer_norm;
 mod mel;
 #[cfg(any(feature = "embeddinggemma2-coreml", feature = "embeddinggemma2-mlx"))]
 pub mod native;
@@ -23,11 +23,68 @@ mod probe;
 mod sleef;
 mod sleef_rempitab;
 mod text;
-mod torch_cpu;
+pub mod torch_cpu;
 mod video;
 mod vision;
 
 pub use video::{RgbFrame as Gemma2VideoFrame, VideoMetadata as Gemma2VideoMetadata};
+
+/// Decode an image using the native Pillow-compatible RGB path.
+///
+/// # Errors
+/// Rejects invalid images, pixel budgets outside 1..=16,777,216, or source dimensions
+/// above the explicit caller budget before allocating decoded pixel buffers.
+pub fn decode_rgb_image(
+    bytes: &[u8],
+    max_pixels: usize,
+) -> std::result::Result<Gemma2VideoFrame, String> {
+    let rgb = image::decode_rgb_limited(bytes, max_pixels)?;
+    Ok(Gemma2VideoFrame {
+        width: rgb.width,
+        height: rgb.height,
+        data: rgb.data,
+    })
+}
+
+/// Native PyTorch-compatible uint8 antialiased bicubic resize, without normalization.
+/// Does not apply an embedding model's size, patch, or token policy.
+///
+/// # Errors
+/// Rejects malformed RGB buffers, zero dimensions or source/output/intermediate
+/// images above 16,777,216 pixels, before allocating the resize buffers.
+pub fn resize_rgb_image(
+    rgb: &Gemma2VideoFrame,
+    height: usize,
+    width: usize,
+) -> std::result::Result<Gemma2VideoFrame, String> {
+    let source_pixels = rgb
+        .width
+        .checked_mul(rgb.height)
+        .filter(|v| *v > 0 && *v <= 16_777_216)
+        .ok_or("invalid RGB source dimensions")?;
+    if rgb.data.len() != source_pixels * 3
+        || height == 0
+        || width == 0
+        || height.checked_mul(width).is_none_or(|v| v > 16_777_216)
+        || rgb.height.checked_mul(width).is_none_or(|v| v > 16_777_216)
+    {
+        return Err("invalid RGB resize dimensions or buffer".into());
+    }
+    let resized = image::resize(
+        &image::Rgb {
+            width: rgb.width,
+            height: rgb.height,
+            data: rgb.data.clone(),
+        },
+        height,
+        width,
+    );
+    Ok(Gemma2VideoFrame {
+        width: resized.width,
+        height: resized.height,
+        data: resized.data,
+    })
+}
 
 use std::path::{Path, PathBuf};
 

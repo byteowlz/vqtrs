@@ -14,6 +14,10 @@
 //! using real convolution/norm weights with synthetic spectrogram inputs.
 //! Every output bit matched in debug and optimized builds. The self-contained
 //! tests retain synthetic output digests and individual mean/rstd bit goldens.
+//!
+//! The additional paired-BF16 stream path is independently checked against Torch
+//! 2.13.0 cf30153 by the public CPU-mechanics facade's tests. It does not replace
+//! this F32 audio norm. PyTorch's BSD-3-Clause notice is in LICENSE-TORCH.txt.
 
 const LANES: usize = 4;
 const CHUNK_VECTORS: usize = 16;
@@ -45,9 +49,10 @@ impl VectorMoments {
     }
 
     /// `UpdateMomentsVec`: independent Welford streams for the four lanes.
-    fn chunk(data: &[f32]) -> Self {
+    fn chunk(data: &[f32], halves: usize, half: usize) -> Self {
         let mut moments = Self::default();
-        for (index, vector) in data.chunks_exact(LANES).enumerate() {
+        for (index, vector) in data.chunks_exact(LANES * halves).enumerate() {
+            let vector = &vector[half * LANES..(half + 1) * LANES];
             let reciprocal = 1.0 / (index + 1) as f32;
             for (lane, &x) in vector.iter().enumerate() {
                 let delta = x - moments.mean[lane];
@@ -62,7 +67,11 @@ impl VectorMoments {
 
 /// `RowwiseMoments` with population variance (`ddof = 0`).
 fn rowwise_moments(row: &[f32]) -> (f32, f32) {
-    let vectors = row.len() / LANES;
+    rowwise_moments_impl(row, 1)
+}
+
+fn rowwise_moments_impl(row: &[f32], halves: usize) -> (f32, f32) {
+    let vectors = row.len() / (LANES * halves);
     let chunks = vectors.div_ceil(CHUNK_VECTORS);
     // ATen's CeilLog2 is at least one, including for zero chunks.
     let depth = if chunks <= 2 {
@@ -71,9 +80,14 @@ fn rowwise_moments(row: &[f32]) -> (f32, f32) {
         (usize::BITS - (chunks - 1).leading_zeros()) as usize
     };
     let mut stack = [VectorMoments::default(); usize::BITS as usize];
-    let body = vectors * LANES;
-    for (index, chunk) in row[..body].chunks(CHUNK_VECTORS * LANES).enumerate() {
-        stack[0].merge(VectorMoments::chunk(chunk));
+    let body = vectors * LANES * halves;
+    for (index, chunk) in row[..body]
+        .chunks(CHUNK_VECTORS * LANES * halves)
+        .enumerate()
+    {
+        for half in 0..halves {
+            stack[0].merge(VectorMoments::chunk(chunk, halves, half));
+        }
         let mut mask = index + 1;
         for level in 1..depth {
             if mask & 1 != 0 {
@@ -103,11 +117,11 @@ fn rowwise_moments(row: &[f32]) -> (f32, f32) {
     for lane in 0..LANES {
         // AddMoments, compiled with Clang's scalar FP contraction. Unlike
         // AddMomentsVec, this squares delta before scaling by the ratio.
-        let total = count + vectors;
+        let total = count + vectors * halves;
         let ratio = if total == 0 {
             0.0
         } else {
-            vectors as f32 / total as f32
+            (vectors * halves) as f32 / total as f32
         };
         let delta = stack[0].mean[lane] - mean;
         mean = ratio.mul_add(delta, mean);
@@ -144,6 +158,24 @@ pub fn layer_norm_rows(data: &mut [f32], cols: usize, weight: &[f32], eps: f32) 
             // LayerNormSecondPass with beta=null: center before scaling, and
             // retain the +0 (in particular its effect on signed zero).
             *x = ((*x - mean) * scale).mul_add(gamma, 0.0);
+        }
+    }
+}
+
+/// Reduced-precision input moments: each eight-wide BF16 load becomes two
+/// successive four-wide F32 Welford streams. Inputs/affine parameters are
+/// lossless F32 representations of BF16; the caller owns the final narrowing.
+pub fn bf16_layer_norm_rows(data: &mut [f32], cols: usize, gamma: &[f32], beta: &[f32], eps: f32) {
+    for row in data.chunks_exact_mut(cols) {
+        let (mean, variance) = rowwise_moments_impl(row, 2);
+        let scale = 1.0 / (variance + eps).sqrt();
+        let bias = -scale * mean;
+        for ((x, &gamma), &beta) in row.iter_mut().zip(gamma).zip(beta) {
+            // Separate vector operation boundaries in the reduced-precision Torch kernel.
+            let scaled = *x * scale;
+            let shifted = scaled + bias;
+            let weighted = shifted * gamma;
+            *x = weighted + beta;
         }
     }
 }

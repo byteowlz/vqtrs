@@ -49,6 +49,14 @@ pub struct Rgb {
 /// dropped (not composited), grey is replicated, 16-bit samples keep their
 /// high byte.
 pub fn decode_rgb(bytes: &[u8]) -> Result<Rgb, String> {
+    decode_rgb_limited(bytes, 16_777_216)
+}
+
+/// Same decoder with an explicit caller pixel budget, checked before allocation.
+pub fn decode_rgb_limited(bytes: &[u8], max_pixels: usize) -> Result<Rgb, String> {
+    if max_pixels == 0 || max_pixels > 16_777_216 {
+        return Err("invalid decoded image pixel budget".into());
+    }
     // Check headers before either decoder allocates pixel/MCU buffers. A
     // small compressed request must not expand into an unbounded image.
     let reader = image::ImageReader::new(std::io::Cursor::new(bytes))
@@ -57,8 +65,10 @@ pub fn decode_rgb(bytes: &[u8]) -> Result<Rgb, String> {
     let (width, height) = reader
         .into_dimensions()
         .map_err(|e| format!("cannot read image dimensions: {e}"))?;
-    if width == 0 || height == 0 || u64::from(width) * u64::from(height) > 16_777_216 {
-        return Err("image must contain between 1 and 16,777,216 pixels".into());
+    if width == 0 || height == 0 || u64::from(width) * u64::from(height) > max_pixels as u64 {
+        return Err(format!(
+            "image must contain between 1 and {max_pixels} pixels"
+        ));
     }
     // JPEG through the libjpeg-turbo-exact decoder (Pillow's decoder).
     if let Some(d) = super::jpeg::decode(bytes) {
@@ -125,8 +135,22 @@ mod limits_tests {
         assert_eq!(super::decode_rgb(&png).unwrap().data, [1, 2, 3]);
         // A valid IHDR claiming 64 million pixels, with the original tiny
         // compressed pixel stream: the allocation must be rejected first.
-        png[16..20].copy_from_slice(&8192_u32.to_be_bytes());
-        png[20..24].copy_from_slice(&8192_u32.to_be_bytes());
+        change_dimensions(&mut png, 8192, 8192);
+        assert!(super::decode_rgb(&png).unwrap_err().contains("pixels"));
+        // Inside the embedding decoder's old ceiling, outside D3's tighter budget.
+        change_dimensions(&mut png, 4000, 4001);
+        assert!(
+            super::decode_rgb_limited(&png, 16_000_000)
+                .unwrap_err()
+                .contains("16000000 pixels")
+        );
+        assert!(super::decode_rgb_limited(&png, 0).is_err());
+        assert!(super::decode_rgb_limited(&png, 16_777_217).is_err());
+    }
+
+    fn change_dimensions(png: &mut [u8], width: u32, height: u32) {
+        png[16..20].copy_from_slice(&width.to_be_bytes());
+        png[20..24].copy_from_slice(&height.to_be_bytes());
         let mut crc = u32::MAX;
         for &byte in &png[12..29] {
             crc ^= u32::from(byte);
@@ -135,7 +159,6 @@ mod limits_tests {
             }
         }
         png[29..33].copy_from_slice(&(!crc).to_be_bytes());
-        assert!(super::decode_rgb(&png).unwrap_err().contains("pixels"));
     }
 }
 

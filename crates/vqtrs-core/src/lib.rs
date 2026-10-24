@@ -34,6 +34,8 @@ mod embedding_gemma2;
 mod error;
 mod rerank;
 mod sparse;
+#[cfg(feature = "embeddinggemma2")]
+pub mod torch_cpu;
 
 pub use catalog::{
     Backend, ModelInfo, QWEN3_MAX_LENGTH, RerankInfo, SparseInfo, dense_models, rerank_models,
@@ -43,7 +45,8 @@ pub use embed::Engine;
 #[cfg(feature = "embeddinggemma2")]
 pub use embedding_gemma2::{
     EMBEDDING_GEMMA2_DIMENSIONS, EMBEDDING_GEMMA2_MAX_TOKENS, EMBEDDING_GEMMA2_REPO,
-    EmbeddingGemma2, Forward, Gemma2Input, Gemma2VideoFrame, Gemma2VideoMetadata,
+    EmbeddingGemma2, Forward, Gemma2Input, Gemma2VideoFrame, Gemma2VideoMetadata, decode_rgb_image,
+    resize_rgb_image,
 };
 pub use error::{Result, VqtrsError};
 pub use rerank::{Ranked, Reranker};
