@@ -86,6 +86,11 @@ fn cuda_positional_cache_preserves_prefixes_fallback_and_scalar_tail_geometries(
                 255,
                 256,
                 511,
+                512,
+                513,
+                1024,
+                2048,
+                ROPE_CACHE_LENGTH - 1,
                 ROPE_CACHE_LENGTH,
                 ROPE_CACHE_LENGTH + 1,
             ] {

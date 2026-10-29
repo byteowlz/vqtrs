@@ -159,6 +159,14 @@ test-bench-compare:
 bench-eg2-readout MODEL_DIR REPORT_PREFIX:
     cargo run --locked --release -p vqtrs-core --features embeddinggemma2-cuda --example eg2_readout_bench -- "{{MODEL_DIR}}" docs/benchmarks/apple-text-fixtures.json "{{REPORT_PREFIX}}"
 
+# Derive the fixed long-context diagnostic from the original synthetic fixture
+bench-eg2-long-fixture MODEL_DIR FIXTURE:
+    uv run --script scripts/benchmarks/extend_eg2_fixture.py "{{MODEL_DIR}}/tokenizer.json" "{{FIXTURE}}"
+
+# CUDA text capture with explicit benchmark-only token bound; production limits unchanged
+bench-eg2-cuda-text MODEL_DIR FIXTURE REPORT MAX_TOKENS="512":
+    cargo run --locked --release -p vqtrs-core --features embeddinggemma2-cuda --example eg2_text_bench -- "{{MODEL_DIR}}" cuda "{{FIXTURE}}" "{{REPORT}}" "{{MAX_TOKENS}}"
+
 # Exact CUDA readout boundary/order/error regression; no downloads or CPU fallback
 test-eg2-cuda-readout MODEL_DIR:
     EG2_MODEL_DIR="{{MODEL_DIR}}" cargo test --locked --release -p vqtrs-core --features embeddinggemma2-cuda cuda_batch_readout -- --ignored

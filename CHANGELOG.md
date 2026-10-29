@@ -6,6 +6,11 @@ All notable changes to this project will be documented in this file.
 
 ### Performance
 
+- Extend exact CUDA positional reuse to 4096 tokens. On a separately declared
+  long-context diagnostic, cache-only GB10/F32 captures improve about 4% overall;
+  original short cases are unchanged. Constants now use 24 MiB for the pinned
+  checkpoint, bounded by 32 MiB per model. The production context cap stays 8192;
+  longer/incompatible inputs retain the original path.
 - Bounded CUDA positional-table reuse adds about 5% speedup over the previous
   EmbeddingGemma 2 optimization on pinned GB10 tests (about 15% over the original
   build, measured directly). Text/image/audio/video outputs stay bit-identical.

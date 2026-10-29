@@ -129,6 +129,31 @@ reported zero errors. Pinned synthetic generation/evaluation artifacts remain
 outside Git; the report records hashes, bounds and qualification limitations.
 The non-evicting12 GiB lease was released; no services were deployed or restarted.
 
+## Round three: explicit long-context qualification
+
+The new diagnostic preserves all seven original cases/55 rows and adds four
+cases/five rows derived by whole-text repetition of the existing medium fixture.
+Actual long lengths are 953, 2024 and 2262 tokens, plus a ragged pair. No
+truncation, model-input policy or production context limit changes. Its new
+sum-of-medians metric must not be compared with earlier short-only suite sums.
+
+```sh
+just bench-eg2-long-fixture /path/to/pinned/checkpoint /tmp/eg2-long.json
+just bench-eg2-cuda-text /path/to/pinned/checkpoint /tmp/eg2-long.json /tmp/capture.json 4096
+```
+
+This benchmark cap is explicit; the default remains 512. Token IDs are checked
+against the engine before timing. The generator pins the original fixture hash
+and tokenizer dependency. Freeze both implementations before interleaved runs.
+
+Increasing the CUDA positional bound from 512 to 4096 improves this extended
+suite about 4% against the round-two implementation; short cases are unchanged.
+The intermediate 2048-row candidate improved about 2.8% but left the 2262-token
+case uncached. The larger bound uses 24 MiB for the pinned model, maximum 32 MiB,
+versus the earlier 3/4 MiB. Width/scalar-tail guards, non-CUDA behavior and the
+8192-token production cap are unchanged; sequences above 4096 use original
+construction. This is a warm-inference optimization, not a free-memory claim.
+
 ## Isolated loop state
 
 Use an isolated reversible worktree for experiments. `.auto/prompt.md` records

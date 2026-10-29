@@ -13,7 +13,7 @@ use super::ops::{
 #[path = "text_cache_tests.rs"]
 mod cache_tests;
 
-const ROPE_CACHE_LENGTH: usize = 512;
+const ROPE_CACHE_LENGTH: usize = 4096;
 
 struct Attention {
     q: Tensor,

@@ -1,7 +1,8 @@
 //! Bounded local, sequential text-batch benchmark for explicit Candle devices.
-//! Arguments: snapshot cpu|metal|cuda fixture.json output.json. Each fixture case has
-//! `id`, prepared `texts` and matching tokenizer `ids`. At most 32 rows per case,
-//! 512 tokens per row; three warmups, five trials; no downloads or fallback.
+//! Arguments: snapshot cpu|metal|cuda fixture.json output.json [max-tokens].
+//! Each case has `id`, prepared `texts` and matching tokenizer `ids`. At most 32
+//! rows per case; default 512 tokens per row, explicit cap up to 4096. Three
+//! warmups, five trials; no downloads, implicit truncation or device fallback.
 //! This is an experimental benchmark, not a native CoreML or MLX backend.
 
 #[cfg(feature = "embeddinggemma2")]
@@ -33,8 +34,15 @@ mod enabled {
     pub fn run() -> Result<()> {
         let args: Vec<_> = std::env::args().skip(1).collect();
         ensure!(
-            args.len() == 4,
-            "usage: snapshot cpu|metal|cuda fixture.json output.json"
+            (4..=5).contains(&args.len()),
+            "usage: snapshot cpu|metal|cuda fixture.json output.json [max-tokens:1..=4096]"
+        );
+        let max_tokens = args
+            .get(4)
+            .map_or(Ok(512), |value| value.parse::<usize>())?;
+        ensure!(
+            (1..=4096).contains(&max_tokens),
+            "benchmark token cap must be 1..=4096"
         );
         let fixture: Fixture = serde_json::from_slice(&std::fs::read(&args[2])?)?;
         ensure!(
@@ -42,7 +50,7 @@ mod enabled {
             "invalid case count"
         );
         for case in &fixture.cases {
-            validate(case)?;
+            validate(case, max_tokens)?;
         }
         let start = Instant::now();
         let device = match args[1].as_str() {
@@ -58,7 +66,7 @@ mod enabled {
             results.push(benchmark_case(&model, &case)?);
         }
         let result = json!({"runtime":format!("candle-{}-f32", args[1]), "load_ms":load_ms,
-            "warmups":3,"trials":5,"dimensions":768,"inference_cache":false,
+            "warmups":3,"trials":5,"dimensions":768,"inference_cache":false,"max_tokens":max_tokens,
             "timing":"prepared text -> tokenization + sequential inference + synchronized host copy",
             "cases":results});
         std::fs::write(&args[3], serde_json::to_vec_pretty(&result)?)?;
@@ -109,7 +117,8 @@ mod enabled {
             })
     }
 
-    fn validate(case: &Case) -> Result<()> {
+    fn validate(case: &Case, max_tokens: usize) -> Result<()> {
+        let max_bytes = if max_tokens <= 512 { 16_384 } else { 131_072 };
         ensure!(
             !case.texts.is_empty() && case.texts.len() <= 32,
             "invalid row count"
@@ -119,11 +128,13 @@ mod enabled {
             "row/token count mismatch"
         );
         ensure!(
-            case.texts.iter().all(|s| s.len() <= 16_384),
+            case.texts.iter().all(|s| s.len() <= max_bytes),
             "text exceeds byte bound"
         );
         ensure!(
-            case.ids.iter().all(|v| !v.is_empty() && v.len() <= 512),
+            case.ids
+                .iter()
+                .all(|v| !v.is_empty() && v.len() <= max_tokens),
             "token bound"
         );
         Ok(())
@@ -157,11 +168,14 @@ mod enabled {
                 texts: vec!["text".into()],
                 ids: vec![vec![2, 1]],
             };
-            assert!(validate(&case).is_ok());
+            assert!(validate(&case, 512).is_ok());
             case.ids[0] = vec![2; 513];
-            assert!(validate(&case).is_err());
+            assert!(validate(&case, 512).is_err());
+            assert!(validate(&case, 4096).is_ok());
+            case.ids[0] = vec![2; 4097];
+            assert!(validate(&case, 4096).is_err());
             case.ids.clear();
-            assert!(validate(&case).is_err());
+            assert!(validate(&case, 4096).is_err());
         }
     }
 }
