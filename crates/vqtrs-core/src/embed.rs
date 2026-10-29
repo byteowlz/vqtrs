@@ -170,7 +170,7 @@ impl Engine {
             #[cfg(feature = "qwen3")]
             Inner::Qwen3(m) => m.embed(texts).map_err(|e| backend_err(e.into())),
             #[cfg(feature = "embeddinggemma2")]
-            Inner::EmbeddingGemma2(m) => texts.iter().map(|text| m.embed_text(text)).collect(),
+            Inner::EmbeddingGemma2(m) => m.embed_text_batch(texts),
             #[cfg(any(feature = "embeddinggemma2-coreml", feature = "embeddinggemma2-mlx"))]
             Inner::Native(m) => m.texts(texts),
         }

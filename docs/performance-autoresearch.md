@@ -77,6 +77,34 @@ was rejected and original EG2 checkpoint weights were absent. Hardware/resource
 authorization is pending; untested engines are not qualified by these CPU results.
 No model downloads, service changes, deployments or pushes were performed.
 
+## CUDA readout result
+
+The [2026-10-29 CUDA summary](benchmarks/exact-speed-cuda-2026-10-29.json) records
+one kept original-Candle text optimization: defer final host readout in groups
+of at most eight independent CUDA forwards. Per-text kernels, precision, inputs
+and normalization are unchanged. It is not padded/arithmetic model batching.
+
+On pinned GB10/F32, immutable-binary ABBA runs improved the fixture suite about
+7%; two same-process paired repeats measured **1.094x** aggregate speedup and
+**1.136x** on eight short queries, with **zero changed output bits**. Singletons
+retain their original path; their timing variation is reported, not hidden.
+CPU/Metal and native/other engines are intentionally unchanged. All seven existing
+cases/55 rows passed token identity, library and HTTP/CLI/UDS exact-vector checks.
+Boundaries, reversal, duplicate rows, long ragged inputs, oversize/recovery, finite
+checks and Compute Sanitizer also passed. See the report for complete scope limits.
+
+```sh
+just bench-eg2-readout /path/to/pinned/checkpoint /tmp/readout-paired
+just test-eg2-cuda-readout /path/to/pinned/checkpoint
+```
+
+Obtain resource admission first. The ARM GB10 build used the installed CUDA13
+compiler explicitly and `RUSTFLAGS="-C target-feature=+fp16"` for an existing
+ARM dependency's instruction requirements, identically for both arms; model
+tensors remain F32. Do not silently change toolchains or infer other hardware's
+qualification. The paired benchmark emits baseline/candidate JSON and enforces
+exact output bits during every timed trial. Raw vectors/profiles stay local.
+
 ## Isolated loop state
 
 Use an isolated reversible worktree for experiments. `.auto/prompt.md` records

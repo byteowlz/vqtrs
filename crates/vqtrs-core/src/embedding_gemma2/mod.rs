@@ -9,6 +9,8 @@
 //! see `ops` and `torch_cpu`. This is not a cross-platform bit-identity guarantee.
 
 mod audio;
+#[cfg(all(test, feature = "embeddinggemma2-cuda"))]
+mod batch_tests;
 mod config;
 mod image;
 mod jpeg;
@@ -357,6 +359,35 @@ impl EmbeddingGemma2 {
         self.embed(Gemma2Input::Text(text))
     }
 
+    /// Embed text in input order, with bounded deferred readout on CUDA devices.
+    ///
+    /// Each text keeps its own complete forward pass: no padding, packing or
+    /// arithmetic batching is introduced. CUDA readouts are grouped in at most
+    /// eight rows; other devices and singleton calls retain the single-text path.
+    ///
+    /// # Errors
+    ///
+    /// Returns tokenization, sequence-limit, device or inference errors, including
+    /// non-finite final vectors. An empty input returns an empty output.
+    pub fn embed_text_batch(&self, texts: &[String]) -> Result<Vec<Vec<f32>>> {
+        if texts.len() < 2 || !self.device.is_cuda() {
+            return texts.iter().map(|text| self.embed_text(text)).collect();
+        }
+        let mut output = Vec::with_capacity(texts.len());
+        for chunk in texts.chunks(8) {
+            if let [text] = chunk {
+                output.push(self.embed_text(text)?);
+                continue;
+            }
+            let tensors = chunk
+                .iter()
+                .map(|text| self.embed_text_tensor(text))
+                .collect::<Result<Vec<_>>>()?;
+            output.extend(host_text_embeddings(&tensors)?);
+        }
+        Ok(output)
+    }
+
     /// Embed complete text without downloading intermediate token states or the pooled vector.
     ///
     /// The returned normalized F32 tensor stays on the device supplied to `from_dir_on`.
@@ -633,6 +664,19 @@ impl EmbeddingGemma2 {
     }
 }
 
+/// Copy independent text readouts together without changing their values or order.
+fn host_text_embeddings(tensors: &[Tensor]) -> Result<Vec<Vec<f32>>> {
+    let rows = Tensor::stack(tensors, 0)
+        .and_then(|t| t.to_vec2::<f32>())
+        .map_err(backend)?;
+    if rows.iter().flatten().any(|v| !v.is_finite()) {
+        return Err(VqtrsError::Backend(
+            "model produced a non-finite embedding".into(),
+        ));
+    }
+    Ok(rows)
+}
+
 /// Download a diagnostic tensor only when capture is requested.
 fn snapshot(tensor: &Tensor, capture: bool) -> Result<Vec<f32>> {
     if !capture {
@@ -707,6 +751,23 @@ fn backend(err: impl std::fmt::Display) -> VqtrsError {
 #[cfg(test)]
 mod limits_tests {
     use super::*;
+
+    #[test]
+    fn grouped_host_readout_preserves_bits_order_and_finite_checks() {
+        let a = Tensor::new(&[0.0_f32, -0.0, 0.25], &Device::Cpu).unwrap();
+        let b = Tensor::new(&[-1.0_f32, f32::MIN_POSITIVE, 0.5], &Device::Cpu).unwrap();
+        let rows = host_text_embeddings(&[a.clone(), b.clone()]).unwrap();
+        assert_eq!(rows.len(), 2);
+        assert_eq!(rows[0][1].to_bits(), (-0.0_f32).to_bits());
+        assert_eq!(rows[1], [-1.0, f32::MIN_POSITIVE, 0.5]);
+        let reversed = host_text_embeddings(&[b, a]).unwrap();
+        assert_eq!(reversed[0], rows[1]);
+        for value in [f32::NAN, f32::INFINITY, f32::NEG_INFINITY] {
+            let bad = Tensor::new(&[value, 0.0, 1.0], &Device::Cpu).unwrap();
+            assert!(host_text_embeddings(&[bad]).is_err());
+        }
+        assert!(host_text_embeddings(&[]).is_err());
+    }
 
     #[test]
     fn rejects_sequences_above_cpu_limit() {

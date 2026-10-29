@@ -78,5 +78,9 @@ name = "eg2_parity"
 required-features = ["embeddinggemma2"]
 
 [[example]]
+name = "eg2_readout_bench"
+required-features = ["embeddinggemma2"]
+
+[[example]]
 name = "eg2_native_smoke"
 required-features = ["embeddinggemma2"]

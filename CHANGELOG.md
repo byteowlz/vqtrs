@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+### Performance
+
+- EmbeddingGemma 2 CUDA text batches defer host readout in groups of at most
+  eight independent F32 embeddings. Pinned GB10 tests measured about 9% lower
+  aggregate workload time, with byte-identical vectors; CPU/Metal, singletons,
+  native runtimes, other engines and multimodal calls keep their original paths.
+  See `docs/benchmarks/exact-speed-cuda-2026-10-29.json` for measured scope and limits.
+
 ## [0.3.0] - 2026-10-14
 
 New optional public backend variants justify a minor pre-1.0 version rather than

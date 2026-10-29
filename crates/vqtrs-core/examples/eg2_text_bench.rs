@@ -55,7 +55,7 @@ mod enabled {
         let load_ms = start.elapsed().as_secs_f64() * 1000.0;
         let mut results = Vec::new();
         for case in fixture.cases {
-            results.push(benchmark_case(&model, case)?);
+            results.push(benchmark_case(&model, &case)?);
         }
         let result = json!({"runtime":format!("candle-{}-f32", args[1]), "load_ms":load_ms,
             "warmups":3,"trials":5,"dimensions":768,"inference_cache":false,
@@ -65,7 +65,7 @@ mod enabled {
         Ok(())
     }
 
-    fn benchmark_case(model: &EmbeddingGemma2, case: Case) -> Result<serde_json::Value> {
+    fn benchmark_case(model: &EmbeddingGemma2, case: &Case) -> Result<serde_json::Value> {
         for (text, ids) in case.texts.iter().zip(&case.ids) {
             ensure!(model.tokenize(text)? == *ids, "token mismatch: {}", case.id);
         }
@@ -130,10 +130,7 @@ mod enabled {
     }
 
     fn encode(model: &EmbeddingGemma2, texts: &[String]) -> Result<Vec<Vec<f32>>> {
-        texts
-            .iter()
-            .map(|text| model.embed_text(text).map_err(Into::into))
-            .collect()
+        model.embed_text_batch(texts).map_err(Into::into)
     }
 
     #[cfg(test)]

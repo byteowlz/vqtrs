@@ -155,6 +155,14 @@ bench-engine MODEL REPORT SUITE="short":
 test-bench-compare:
     uv run --no-project python -m unittest discover -s scripts/benchmarks -p 'test_compare_exact.py'
 
+# Paired same-process sequential/deferred CUDA readout benchmark; local pinned assets only
+bench-eg2-readout MODEL_DIR REPORT_PREFIX:
+    cargo run --locked --release -p vqtrs-core --features embeddinggemma2-cuda --example eg2_readout_bench -- "{{MODEL_DIR}}" docs/benchmarks/apple-text-fixtures.json "{{REPORT_PREFIX}}"
+
+# Exact CUDA readout boundary/order/error regression; no downloads or CPU fallback
+test-eg2-cuda-readout MODEL_DIR:
+    EG2_MODEL_DIR="{{MODEL_DIR}}" cargo test --locked --release -p vqtrs-core --features embeddinggemma2-cuda cuda_batch_readout -- --ignored
+
 # === Code Quality ===
 
 # Format all code

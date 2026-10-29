@@ -1,0 +1,53 @@
+{
+  "schema": "vqtrs.performance-experiment-summary.v1",
+  "status": "kept_cuda_text_readout_optimization",
+  "date": "2026-10-29",
+  "base": "6ae1b13ed59297d2f1540babf6abd93eb4e06c9d",
+  "hardware": {"gpu": "NVIDIA GB10", "arch": "sm_120a", "cpu": "ARM Cortex-X925/Cortex-A725", "kernel": "6.14.0-1015-nvidia", "driver": "580.95.05", "resource_lease_gib": 12, "lease_seconds": 3600, "eviction": false},
+  "build": {"rust": "1.97.0", "cuda": "13.0.88", "candle": "0.11.0", "feature": "embeddinggemma2-cuda", "tensor_dtype": "F32 unchanged", "rustflags": "-C target-feature=+fp16", "rustflags_reason": "Existing gemm-f16 ARM dependency requires advertised native FP16 instructions during codegen; does not change model tensor dtype. Identical baseline/candidate flags."},
+  "assets": {
+    "checkpoint": "google/embeddinggemma-2",
+    "revision": "914f7f89142e33e77833254d9c9b90c3cef7303b",
+    "weights_sha256": "197a32965d4b1105faf060417baa899e193fb73cd401f42ec9295234d5553d79",
+    "tokenizer_sha256": "4d777ef5bdc1aa36227abdfb77c3e49e7b9c892d16e1b6bda41c393504828be4",
+    "config_sha256": "b8f1e9931b57fbc054acdb445c41765d55b0074c58d145fa82839941ad1b5bb3",
+    "processor_sha256": "168f6a08522f3ce5dea596d94d003af2fd691742d4f41fe1f9d8cce76bfbf69c",
+    "fixture": "docs/benchmarks/apple-text-fixtures.json",
+    "fixture_sha256": "ddc81d848622dcedb109b73a80d7f1a75c799345d150599b688c5e210a53f2c5",
+    "immutable_baseline_binary_sha256": "5e287e2f4dae8e81eb9230676ab53b850e0dabe20c96fc4f7ecd5622eed03c5c",
+    "final_abba_candidate_binary_sha256": "8f2509bfb1652aba6e9539e91af3908467da535adebe9c8c7d51b0de343f686c"
+  },
+  "change": "Compute each text independently with the existing resident F32 tensor seam, then copy at most eight final vectors together. No padding, packing, precision, model, normalization or arithmetic batching changes. Singletons, CPU, Metal, native backends and multimodal calls retain their original paths.",
+  "profile": {"tool": "Nsight Systems 2025.3.2", "trace_seconds": 5, "scope": "baseline trace includes startup and early text cases, not a pure steady-state trace", "dtoh_share_of_recorded_cuda_api_time_percent": 14.5, "dtoh_calls": 778, "gpu_small_gemm_share_of_recorded_kernel_time_percent": 52.6},
+  "discarded": [
+    {"candidate": "per-layer cached GPU ones norm weight", "speedup": 1.0057769186843046, "changed_bits": 0, "reason": "gain too small relative to variation"},
+    {"candidate": "grouped attention GEMM without repeated KV heads", "reason": "exact F32 output gate failed on query-1; restored, no tolerance relaxed"},
+    {"candidate": "Q/K/V normalization before head transpose", "cuda_speedup": 1.005671713003568, "cpu_speedup": 1.000201584535613, "changed_bits": 0, "reason": "no compelling gain; restored"}
+  ],
+  "qualification": {
+    "fixture_cases": 7,
+    "fixture_rows": 55,
+    "immutable_binary_abba_speedups": [1.0743126136574161, 1.0716212326549905, 1.0714450095853547],
+    "immutable_binary_abba_changed_bits": 0,
+    "paired_protocol": "same process/model; three warmups per arm, six >=200ms samples per arm per case; alternating arm order; two complete repeats",
+    "paired_baseline_suite_ms": 681.2031211726191,
+    "paired_candidate_suite_ms": 622.9142768452381,
+    "paired_speedup": 1.0935744234705713,
+    "paired_worst_case_latency_ratio": 1.015031603614168,
+    "paired_changed_bits": 0,
+    "cases": [
+      {"id": "query-1", "baseline_ms": 9.563402380952382, "candidate_ms": 9.542074261904762, "speedup": 1.0022351659044166},
+      {"id": "query-8", "baseline_ms": 75.93459716666666, "candidate_ms": 66.818262, "speedup": 1.136434784350821},
+      {"id": "docs-8", "baseline_ms": 97.37852566666666, "candidate_ms": 88.20983233333334, "speedup": 1.1039418519546216},
+      {"id": "queries-4", "baseline_ms": 38.46604141666667, "candidate_ms": 34.467668083333336, "speedup": 1.1160035928066374},
+      {"id": "text-medium", "baseline_ms": 17.777112208333335, "candidate_ms": 17.730240583333334, "speedup": 1.0026435978000243},
+      {"id": "text-near-cap", "baseline_ms": 37.314165833333334, "candidate_ms": 37.87505758333333, "speedup": 0.985190999412584, "note": "unchanged singleton path; ~1.5% variation, not a claimed improvement"},
+      {"id": "bulk-32", "baseline_ms": 404.76927650000005, "candidate_ms": 368.271142, "speedup": 1.099106691612562}
+    ],
+    "max_process_rss_kib": 2042448,
+    "memory_note": "Process RSS is not complete unified-memory accounting; the non-evicting memory lease is resource admission, not a measured peak guarantee.",
+    "checks": ["default workspace format/check/strict Clippy/tests", "CPU EmbeddingGemma2 workspace check/strict Clippy/tests on Apple Silicon", "CUDA workspace check/strict Clippy/tests on ARM Linux", "five existing GPU operation tests", "exact batch sizes 0/1/2/7/8/9/16/17/32, reversed order and duplicates", "accepted ragged >512-token inputs, oversize rejection and post-error recovery", "finite/NaN/infinity/signed-zero host-readout tests", "Compute Sanitizer memcheck: zero errors, exact batch test passed in 214.92 seconds", "HTTP 55 rows and CLI/UDS 55 rows match immutable original GPU vectors exactly; token counts exact", "empty HTTP batch preserved, 413 item-cap rejection, health recovery, owned server reaped"],
+    "transport_changes": "none; existing routes automatically use the Engine method",
+    "scope_limits": ["Only this pinned GB10 CUDA/F32 profile was performance-qualified", "No claim of universal bit identity across runtimes, devices or checkpoints", "CPU/Metal intentionally do not enable deferred readout; native/ONNX/Qwen3 and multimodal paths are untouched", "Existing synthetic fixtures reused; no new labelled retrieval study or corpus generated", "No production service restart, installation, deployment or push"]
+  }
+}
