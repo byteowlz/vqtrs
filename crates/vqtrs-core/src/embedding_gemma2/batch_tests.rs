@@ -68,6 +68,24 @@ fn cuda_batch_readout_preserves_singleton_bits_order_boundaries_and_errors() -> 
     Ok(())
 }
 
+#[test]
+#[ignore = "requires local EG2_MODEL_DIR and CUDA; targeted error-path memory check"]
+fn cuda_batch_readout_error_path_recovers() -> Result<()> {
+    let root = std::env::var("EG2_MODEL_DIR")?;
+    let model = EmbeddingGemma2::from_dir_on(std::path::Path::new(&root), &Device::new_cuda(0)?)?;
+    let good = vec!["a".to_owned(); 2];
+    let expected = vec![model.embed_text("a")?; 2];
+    let oversized = "a ".repeat(EMBEDDING_GEMMA2_MAX_TOKENS);
+    ensure!(model.tokenize(&oversized)?.len() > EMBEDDING_GEMMA2_MAX_TOKENS);
+    for index in 0..2 {
+        let mut input = good.clone();
+        input[index].clone_from(&oversized);
+        ensure!(model.embed_text_batch(&input).is_err());
+        ensure!(exact(&expected, &model.embed_text_batch(&good)?));
+    }
+    Ok(())
+}
+
 fn check_limits(model: &EmbeddingGemma2, texts: &[String], reference: &[Vec<f32>]) -> Result<()> {
     let long = texts[0].repeat(64);
     let count = model.tokenize(&long)?.len();

@@ -379,11 +379,22 @@ impl EmbeddingGemma2 {
                 output.push(self.embed_text(text)?);
                 continue;
             }
-            let tensors = chunk
-                .iter()
-                .map(|text| self.embed_text_tensor(text))
-                .collect::<Result<Vec<_>>>()?;
-            output.extend(host_text_embeddings(&tensors)?);
+            let readout = || {
+                let tensors = chunk
+                    .iter()
+                    .map(|text| self.embed_text_tensor(text))
+                    .collect::<Result<Vec<_>>>()?;
+                host_text_embeddings(&tensors)
+            };
+            match readout() {
+                Ok(rows) => output.extend(rows),
+                Err(error) => {
+                    // An error after an earlier queued forward must not release
+                    // the caller's admission permit while our GPU work is live.
+                    self.device.synchronize().map_err(backend)?;
+                    return Err(error);
+                }
+            }
         }
         Ok(output)
     }

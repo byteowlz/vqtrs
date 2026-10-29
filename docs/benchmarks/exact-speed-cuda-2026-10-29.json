@@ -24,6 +24,13 @@
     {"candidate": "grouped attention GEMM without repeated KV heads", "reason": "exact F32 output gate failed on query-1; restored, no tolerance relaxed"},
     {"candidate": "Q/K/V normalization before head transpose", "cuda_speedup": 1.005671713003568, "cpu_speedup": 1.000201584535613, "changed_bits": 0, "reason": "no compelling gain; restored"}
   ],
+  "error_path_followup": {
+    "behavior": "Synchronize the owned device stream before returning a deferred-forward/readout error so request admission cannot be released with queued GPU work outstanding.",
+    "final_paired_speedup": 1.0930101389753586,
+    "final_changed_bits": 0,
+    "final_worst_case_latency_ratio": 1.0053637461261227,
+    "checks": "Final default/CPU/CUDA check, strict Clippy and tests passed; both real-checkpoint CUDA batch tests passed; targeted final error-path Compute Sanitizer run passed with zero errors. Full boundary-test memcheck above was run on the readout optimization before this additional error-path drain guard."
+  },
   "qualification": {
     "fixture_cases": 7,
     "fixture_rows": 55,
