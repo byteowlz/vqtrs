@@ -3,7 +3,7 @@
 ## Objective and stages
 Optimize existing engines, not their model identities or numerical contracts. Base: 6ae1b13ed59297d2f1540babf6abd93eb4e06c9d, Rust 1.97.0. Work is isolated because the user's main worktree has unrelated tracker migration changes.
 
-Three DeepSeek research agents were dispatched for ONNX, native/Candle, and accuracy. All made partial progress but hit upstream HTTP 429 before writing reports. Their terminal evidence was recovered; parent verified the source and synthesized this plan. Do not call their partial analysis completed qualification.
+Three DeepSeek research agents were dispatched for ONNX, native/Candle, and accuracy. Upstream HTTP 429 interrupted them; after recovery, all three wrote partial reports in the local research directory. Parent verified source and synthesized this plan. Some agents assumed Linux-style HF cache locations and missed the cached ONNX model in the macOS OS cache directory; original EG2 weights really are absent. Research hypotheses are not qualification.
 
 1. ONNX CPU: benchmark cached all-MiniLM-L6-v2, test intra-op oversubscription first. Current fastembed defaults to every logical CPU. Do not change other engines' defaults based on one model's result. Dense batching/order/token counts must stay exact.
 2. Candle EmbeddingGemma2 CPU: investigate repeated RoPE constants/tables and allocation work, never reassociate reductions or change GEMM/bias boundaries. Existing F32 reference bit-identity is mandatory. First require whole-output baseline comparison, then operation golden tests and full parity if assets exist.
@@ -28,4 +28,8 @@ The pi-autoresearch skill is installed but init_experiment/run_experiment/log_ex
 Local Apple Silicon, 24 logical CPUs, 192 GiB memory; background CPU workloads observed. Initially ~12 GiB free disk. Existing model caches only. New compact no-debug/nonincremental target, no deletion of others' artifacts. GPU and missing checkpoints remain explicit coverage gaps.
 
 ## What's been tried
-Baseline pending.
+Eight baseline/experiment/verification cycles completed; see docs/benchmarks/exact-speed-cpu-2026-10-29.json and local .auto/log.jsonl. All production candidates were restored exactly. Threads=1 regressed batches ~4x; threads=4 improved aggregate but regressed batches 17%; threads=8 improved short suite 1.37x but failed long/ragged qualification up to 2.05x slower; threads=16 also failed long qualification. Do not retry blanket thread caps without a genuinely different workload-specific configuration strategy. encode_fast token accounting improved its phase ~4% in two runs, but total-time results were near host noise and broad tokenizer-family equivalence lacks coverage: do not claim a kept speedup.
+
+The explicit local 8 GiB dpty lease for larger-engine qualification was REJECTED. Never lower the claim or evict services to get through. Asked user for an authorized GPU host and budget. Original EG2 model.safetensors symlink is broken. ONNX MiniLM is cached under the macOS OS-cache Hugging Face directory. No model downloads, GPU jobs, production restarts, pushes or production optimization commits occurred. Follow-up: vqtrs-9ay9. Loop is paused at a resource/hardware decision, not running unattended.
+
+Harness baseline binary was rebuilt after adding token phase instrumentation at 7aecfaf; the prior thread-segment baseline is separately retained. Do not mix schemas or binary segments. Keep both immutable and record hashes before resuming.

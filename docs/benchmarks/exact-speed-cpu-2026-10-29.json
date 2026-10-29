@@ -1,0 +1,45 @@
+{
+  "schema": "vqtrs.performance-experiment-summary.v1",
+  "status": "initial_cpu_tranche_complete_no_production_win_kept",
+  "date": "2026-10-29",
+  "base": "6ae1b13ed59297d2f1540babf6abd93eb4e06c9d",
+  "harness_commits": ["8f12fc6", "7aecfaf"],
+  "hardware": {"cpu": "Apple M2 Ultra", "logical_cpus": 24, "memory_gib": 192, "background_contention": "present and variable; unrelated workloads left running"},
+  "build": {"rust": "1.97.0", "profile": "release", "features": "default ONNX-only", "fastembed": "5.17.3", "ort": "2.0.0-rc.12", "tokenizers": "0.22.2"},
+  "assets": {
+    "model": "Qdrant/all-MiniLM-L6-v2-onnx",
+    "revision": "d13954661f83248295ba75c1ed411eef3b7b936e",
+    "model_sha256": "bbd7b466f6d58e646fdc2bd5fd67b2f5e93c0b687011bd4548c420f7bd46f0c5",
+    "tokenizer_sha256": "851ca67100d372ca3ae031a6abd168f53489eebfd7d89523f35c5c9b4d372c3c",
+    "fixture": "scripts/parity/eg2_cases_text.json",
+    "fixture_sha256": "0a850622d705c488833125c5de4f35bb7dbb999e23f39cead625c8a910c6b37c",
+    "acquisition": "already cached; no model downloads",
+    "thread_baseline_binary_sha256": "9a063cb2cbc4b0780fd96be60ea1236bd0a4e70c0a68f329470cb4e614e6411d",
+    "phase_baseline_binary_sha256": "13349c5b514396c2a94538089baa2fbce066461f0743df3fcca9f36a7f3f4712"
+  },
+  "protocol": {
+    "arm_order": ["baseline", "candidate", "candidate", "baseline"],
+    "warmups_per_case": 3,
+    "samples_per_case_per_process": 5,
+    "minimum_timed_work_per_sample_ms": 200,
+    "primary": "sum of per-case median warm library call ms; token-accounting segment separately reports phase sum",
+    "short_suite": "six existing singleton cases plus ragged six-row and reversed six-row batches",
+    "all_suite": "seven existing singleton cases including long text plus ragged seven-row and reversed seven-row batches",
+    "accuracy_gate": "exact token counts, row count/order and all F32 output bits vs same-engine baseline; every repeat deterministic",
+    "result_cache": false,
+    "timed_scope": "token accounting, inference, completed host vectors, finite/output-bit materialization; excludes model loading"
+  },
+  "runs": [
+    {"id": 0, "candidate": "identical-binary noise control", "suite": "short", "baseline_ms": 87.42078476366896, "candidate_ms": 89.55806151078066, "speedup": 0.9761352946785877, "worst_case_latency_ratio": 1.0856825999157838, "changed_output_bits": 0, "decision": "baseline; ~2.4% aggregate and up to 8.6% per-case self-comparison variation"},
+    {"id": 1, "candidate": "intra_threads=1", "suite": "short", "baseline_ms": 82.12116298291242, "candidate_ms": 218.53860642356784, "speedup": 0.37577416790032314, "worst_case_latency_ratio": 4.082530481489162, "changed_output_bits": 0, "decision": "discard; batch regressions"},
+    {"id": 2, "candidate": "intra_threads=4", "suite": "short", "baseline_ms": 84.92598398201551, "candidate_ms": 75.73744233578434, "speedup": 1.1213209921387823, "worst_case_latency_ratio": 1.1737591519224626, "changed_output_bits": 0, "decision": "discard; aggregate improvement hides batch regressions"},
+    {"id": 3, "candidate": "intra_threads=8", "suite": "short", "baseline_ms": 84.57926512102578, "candidate_ms": 61.78877691348545, "speedup": 1.3688451098401058, "worst_case_latency_ratio": 0.8961378902337812, "changed_output_bits": 0, "decision": "initially promising; superseded by failed long qualification"},
+    {"id": 4, "candidate": "intra_threads=8", "suite": "all", "baseline_ms": 314.3315160226181, "candidate_ms": 494.22407552688674, "speedup": 0.6360101249367764, "worst_case_latency_ratio": 2.0532298557901276, "changed_output_bits": 0, "decision": "discard; no global eight-thread default"},
+    {"id": 5, "candidate": "intra_threads=16", "suite": "all", "baseline_ms": 326.8696645418791, "candidate_ms": 373.42526250687627, "speedup": 0.8753282044914145, "worst_case_latency_ratio": 1.2994223609875015, "changed_output_bits": 0, "decision": "discard; no consistent improvement"},
+    {"id": 6, "candidate": "encode_fast only for token accounting", "suite": "all", "baseline_ms": 213.1265788307253, "candidate_ms": 211.55131859723315, "speedup": 1.0074462321669158, "baseline_token_ms": 13.721406747204293, "candidate_token_ms": 13.212155965741289, "token_speedup": 1.0385441091358198, "worst_case_latency_ratio": 1.021351065179042, "changed_output_bits": 0, "decision": "discard pending stronger evidence and tokenizer-family coverage"},
+    {"id": 7, "candidate": "encode_fast verification repeat", "suite": "all", "baseline_ms": 306.8309147570395, "candidate_ms": 299.3460137934667, "speedup": 1.0250041778366124, "baseline_token_ms": 13.957978965339393, "candidate_token_ms": 13.334173036833946, "token_speedup": 1.0467824983808343, "worst_case_latency_ratio": 1.0733889375142691, "changed_output_bits": 0, "decision": "discard; total-time evidence comparable with contention noise, one case regresses, general tokenizer gate absent"}
+  ],
+  "checks": ["cargo fmt --all", "cargo check --locked --offline --workspace", "cargo clippy --locked --offline --workspace --all-targets", "cargo test --locked --offline --workspace", "four comparator regression tests", "ripwire quality delta and benchmark contract check", "git diff --check"],
+  "coverage_gaps": ["Only one ONNX CPU model, not whole-catalog or retrieval qualification", "No sparse/M3/rerank/Qwen3 model-specific measurements", "No Candle/CoreML/MLX/GPU inference; normal local 8 GiB lease rejected", "Original EG2 cached metadata exists but checkpoint weight symlink target is missing", "Thread changes must not be generalized to different models, providers or hardware", "No labelled retrieval experiments; unchanged output bits cover only the existing synthetic workload", "CPU contention is substantial; ABBA suite-level pairing does not remove all drift", "Experiment extension tools absent; explicit manual .auto measure/check/log equivalents used", "Initial setup used an unresolved model alias and corrected documentation lint failures before the immutable baseline; not performance experiments"],
+  "outcome": "All production candidates restored exactly. Harness and reproducible negative findings retained on isolated autoresearch branch. No production deployment or push. Next engine qualification requires authorized hardware/resources."
+}

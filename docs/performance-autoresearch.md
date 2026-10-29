@@ -61,6 +61,22 @@ not proof of general retrieval accuracy. Changed kernels/batching/precision need
 broader differential and labelled retrieval tests; never loosen goldens to keep
 an experiment. Preserve sparse support/weights and rerank scores/ties too.
 
+## Initial CPU results
+
+The [2026-10-29 summary](benchmarks/exact-speed-cpu-2026-10-29.json) records eight
+baseline/experiment/verification cycles. No production optimization was retained.
+An eight-thread ONNX cap improved the short MiniLM suite **1.37x**, with identical
+output bits, but failed long/ragged qualification (up to **2.05x slower**).
+One/four/sixteen-thread caps also failed workload gates. Skipping token offsets
+improved token-accounting time about 4%, but overall gains were near host noise
+and tokenizer-family coverage was missing. Both ideas were restored, not shipped.
+
+Default format/check/strict-Clippy/tests and comparator tests passed. Larger
+Candle/native/GPU qualification could not proceed: normal local memory admission
+was rejected and original EG2 checkpoint weights were absent. Hardware/resource
+authorization is pending; untested engines are not qualified by these CPU results.
+No model downloads, service changes, deployments or pushes were performed.
+
 ## Isolated loop state
 
 Use an isolated reversible worktree for experiments. `.auto/prompt.md` records
