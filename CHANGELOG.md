@@ -6,6 +6,12 @@ All notable changes to this project will be documented in this file.
 
 ### Performance
 
+- Bounded CUDA positional-table reuse adds about 5% speedup over the previous
+  EmbeddingGemma 2 optimization on pinned GB10 tests (about 15% over the original
+  build, measured directly). Text/image/audio/video outputs stay bit-identical.
+  Vector-tail-incompatible geometries, CPU/Metal and sequences above 512 tokens
+  keep original construction; constant storage is capped at 4 MiB per model.
+  See `docs/benchmarks/exact-speed-cuda-round2-2026-10-29.json`.
 - EmbeddingGemma 2 CUDA text batches defer host readout in groups of at most
   eight independent F32 embeddings. Pinned GB10 tests measured about 9% lower
   aggregate workload time, with byte-identical vectors; CPU/Metal, singletons,

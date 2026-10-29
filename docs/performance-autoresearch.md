@@ -105,6 +105,30 @@ tensors remain F32. Do not silently change toolchains or infer other hardware's
 qualification. The paired benchmark emits baseline/candidate JSON and enforces
 exact output bits during every timed trial. Raw vectors/profiles stay local.
 
+## Round two: bounded CUDA positional constants
+
+The [round-two report](benchmarks/exact-speed-cuda-round2-2026-10-29.json) compares
+against the **already optimized** readout-eight build. Readout groups16/32 were
+rejected as noise. Reusing immutable CUDA positional-table prefixes measured
+**1.051x additional speedup** across two ABBA repeats with zero changed output
+bits. Medium/near-cap text improved about16%/13%; singleton short queries were
+unchanged. A separate direct comparison measured **1.150x versus the original
+serial build**, not an extrapolated multiplication.
+
+This caches constants, never inference results. At most512 positional rows per
+attention type are retained:3 MiB for the pinned checkpoint, maximum4 MiB. Both
+head widths must be positive, <=512 and divisible by8, with finite positive
+RoPE theta values. The width guard preserves the original vectorized sine/cosine
+versus scalar-tail rounding behavior. Missing/incompatible parameters, larger
+sequences and non-CUDA devices retain the original path. Readout size stays8.
+
+Exact geometry/fallback tests, real-model boundary/order/error tests,7 synthetic
+images,5 synthetic audio cases and a two-frame video passed. HTTP/CLI/UDS output
+and token counts stayed exact. Geometry and full-model Compute Sanitizer runs
+reported zero errors. Pinned synthetic generation/evaluation artifacts remain
+outside Git; the report records hashes, bounds and qualification limitations.
+The non-evicting12 GiB lease was released; no services were deployed or restarted.
+
 ## Isolated loop state
 
 Use an isolated reversible worktree for experiments. `.auto/prompt.md` records

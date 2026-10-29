@@ -9,6 +9,12 @@ use super::ops::{
     apply_rope, gelu_tanh, linear, mul_scalar, rms_norm, rope_tables, softmax_last_dim,
 };
 
+#[cfg(all(test, feature = "embeddinggemma2-cuda"))]
+#[path = "text_cache_tests.rs"]
+mod cache_tests;
+
+const ROPE_CACHE_LENGTH: usize = 512;
+
 struct Attention {
     q: Tensor,
     k: Tensor,
@@ -157,6 +163,8 @@ pub struct TextModel {
     embedding_projection: Tensor,
     cfg: TextConfig,
     eps: f32,
+    // CUDA-only, bounded positional constants; never caches inference results.
+    rope_cache: Option<[(Tensor, Tensor); 2]>,
 }
 
 impl TextModel {
@@ -174,7 +182,7 @@ impl TextModel {
                 Layer::load(&vb.pp(format!("layers.{i}")), cfg, geo)
             })
             .collect::<Result<Vec<_>>>()?;
-        Ok(Self {
+        let mut model = Self {
             embed_tokens: vb.get((cfg.vocab_size, h), "embed_tokens.weight")?,
             // sqrt and pow(-0.5) in double precision, rounded to f32 like the reference buffers.
             embed_scale: (h as f64).sqrt() as f32,
@@ -186,7 +194,26 @@ impl TextModel {
             embedding_projection: vb.get((cfg.embedding_dim, h), "embedding_projection.weight")?,
             eps: cfg.rms_norm_eps as f32,
             cfg: cfg.clone(),
-        })
+            rope_cache: None,
+        };
+        // A multiple of eight keeps every row on the original vectorized
+        // sine/cosine path, avoiding a scalar-tail rounding change in prefixes.
+        let cacheable = [LayerType::SlidingAttention, LayerType::FullAttention]
+            .into_iter()
+            .all(|kind| {
+                cfg.head_dim_for(kind)
+                    .is_some_and(|d| d > 0 && d <= 512 && d.is_multiple_of(8))
+                    && cfg
+                        .rope_theta(kind)
+                        .is_some_and(|theta| theta.is_finite() && theta > 0.0)
+            });
+        if vb.device().is_cuda() && cacheable {
+            model.rope_cache = Some([
+                model.rope(LayerType::SlidingAttention, ROPE_CACHE_LENGTH, vb.device())?,
+                model.rope(LayerType::FullAttention, ROPE_CACHE_LENGTH, vb.device())?,
+            ]);
+        }
+        Ok(model)
     }
 
     /// Scaled token embeddings `(seq, hidden)` for `ids` of shape `(seq,)`.
@@ -241,6 +268,17 @@ impl TextModel {
     }
 
     fn rope(&self, layer_type: LayerType, seq: usize, dev: &Device) -> Result<(Tensor, Tensor)> {
+        if seq <= ROPE_CACHE_LENGTH
+            && let Some(cache) = &self.rope_cache
+        {
+            let (cos, sin) = match layer_type {
+                LayerType::SlidingAttention => &cache[0],
+                LayerType::FullAttention => &cache[1],
+            };
+            if cos.device().same_device(dev) {
+                return Ok((cos.narrow(0, 0, seq)?, sin.narrow(0, 0, seq)?));
+            }
+        }
         let missing = || candle_core::Error::Msg(format!("no RoPE parameters for {layer_type:?}"));
         let theta = self.cfg.rope_theta(layer_type).ok_or_else(missing)?;
         let head_dim = self.cfg.head_dim_for(layer_type).ok_or_else(missing)?;

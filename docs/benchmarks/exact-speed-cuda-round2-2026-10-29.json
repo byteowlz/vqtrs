@@ -1,0 +1,65 @@
+{
+  "schema": "vqtrs.performance-experiment-summary.v1",
+  "status": "kept_bounded_cuda_positional_constants",
+  "date": "2026-10-29",
+  "baseline_commit": "740864c5c",
+  "baseline_behavior": "Previously kept independent CUDA forwards with readout groups <=8 and error-path drain",
+  "hardware": "NVIDIA GB10 sm_120a, ARM Linux6.14.0-1015-nvidia, driver580.95.05",
+  "build": "Rust1.97.0, Candle0.11.0, CUDA13.0.88, embeddinggemma2-cuda, F32 unchanged, identical -C target-feature=+fp16 ARM codegen flag",
+  "resource": {"claim_gib": 12, "duration_seconds": 3600, "eviction": false, "released": true, "production_services_changed": false},
+  "assets": {
+    "checkpoint": "google/embeddinggemma-2@914f7f89142e33e77833254d9c9b90c3cef7303b",
+    "weights_sha256": "197a32965d4b1105faf060417baa899e193fb73cd401f42ec9295234d5553d79",
+    "fixture": "docs/benchmarks/apple-text-fixtures.json",
+    "fixture_sha256": "ddc81d848622dcedb109b73a80d7f1a75c799345d150599b688c5e210a53f2c5",
+    "round2_baseline_binary_sha256": "a63f7c5e9d67c633ee38eb2170997cc38a9de40dfbdd8572b78b72bb32142849",
+    "qualified_candidate_binary_sha256": "31fc377af987b2ea948cc4524bb536906ea877100eb4788979fc6ae34417a183",
+    "qualified_text_source_sha256": "9a2857f1fe04cc43d3ef05ae581dec479f9bcddba934f6f76bf7ed4dd91e1047",
+    "immutable_old_media_cli_sha256": "b3a053f3a08da3c6f0b326d0b30452b3333e69e977038c464fdf1df23e3678db",
+    "candidate_media_cli_sha256": "5f5fc5cef2d9ce3e0e2ddbfda21f570eb7e697cb7125a4cfd2fc0b5f982815ec"
+  },
+  "change": {
+    "description": "Precompute immutable CUDA RoPE sine/cosine tables for512 positions per attention type; use exact prefix views for short sequences instead of per-input host construction and upload. No output/result cache, arithmetic batching, precision or model changes.",
+    "eligibility": "CUDA only; both attention head dimensions positive, <=512 and divisible by8; both theta parameters finite and positive. Missing/incompatible parameters preserve original lazy behavior.",
+    "why_multiple_of_eight": "Original CPU sine/cosine construction uses vectorized blocks of8 followed by a scalar tail. Prefixing a larger table must not replace a scalar-tail computation with differently rounded vector operations.",
+    "constant_storage": "At most4 MiB per eligible model,3 MiB for the pinned canonical checkpoint. CPU/Metal and sequences>512 use original construction. Readout bound remains8."
+  },
+  "protocol": "Immutable-current-baseline ABBA, three warmups per case, five >=200ms samples per process/case, two complete repeats, identical assets/flags. All repeated output bits and token IDs checked. Sum of per-case median warm latencies; host vectors complete before timing ends.",
+  "noise_control": {"same_binary_speedup": 0.9992582861567146, "worst_case_latency_ratio": 1.012788066173768, "changed_bits": 0},
+  "discarded": [
+    {"candidate": "readout group16", "speedup": 1.0020688797870783, "changed_bits": 0, "reason": "gain comparable with variation"},
+    {"candidate": "readout group32", "speedup": 1.002873297076384, "changed_bits": 0, "reason": "gain comparable with variation; retain tested8-row bound"}
+  ],
+  "repeat_speedups": [1.0502752000440019, 1.0514497424485243],
+  "combined_repeats": {
+    "baseline_suite_ms": 619.1363803392858,
+    "candidate_suite_ms": 589.0746309166667,
+    "speedup": 1.0510321576331332,
+    "changed_bits": 0,
+    "worst_case_latency_ratio": 0.9995546095468032,
+    "cases": [
+      {"id":"query-1","baseline_ms":9.587696714285714,"candidate_ms":9.57794780952381,"speedup":1.0010178490169064},
+      {"id":"query-8","baseline_ms":66.90197283333333,"candidate_ms":66.87217533333333,"speedup":1.0004455889142454},
+      {"id":"docs-8","baseline_ms":87.75243850000001,"candidate_ms":85.74304166666667,"speedup":1.0234351009046896},
+      {"id":"queries-4","baseline_ms":34.483696583333334,"candidate_ms":34.2327855,"speedup":1.0073295549768608},
+      {"id":"text-medium","baseline_ms":17.683948208333334,"candidate_ms":15.23727825,"speedup":1.1605713250221268},
+      {"id":"text-near-cap","baseline_ms":35.0677795,"candidate_ms":31.100167857142857,"speedup":1.1275752485029078},
+      {"id":"bulk-32","baseline_ms":367.65884800000003,"candidate_ms":346.3112345,"speedup":1.0616428558282882}
+    ],
+    "median_fresh_process_load_ms": {"baseline":1637.8116335000002,"candidate":1584.3098959999998},
+    "load_note": "OS/compiler caches not cleared; loading is monitored separately, not claimed as a causal startup improvement."
+  },
+  "direct_vs_original_serial_build": {"baseline_suite_ms":678.6152583333333,"candidate_suite_ms":590.0226530119048,"speedup":1.1501511931265476,"changed_bits":0,"note":"Measured directly, not multiplied historical speedups."},
+  "checks": [
+    "Default and CPU-feature format/check/strict Clippy/workspace tests",
+    "CUDA workspace check/strict Clippy/tests and five existing GPU operation tests",
+    "Model-free cache bits: head dimensions6/8/256/512/520, both theta values, lengths1/2/3/7/16/31/127/128/255/256/511/512/513, CPU no-cache and missing-parameter fallback",
+    "Real-checkpoint exact batch boundaries, order/reversal/duplicates, accepted long-ragged input, oversize rejection and post-error recovery",
+    "Existing seeded synthetic media differential:7 images,5 audio cases including30-second truncation,1 two-frame video; zero changed vector bits vs immutable old CUDA CLI",
+    "HTTP55 and CLI/UDS55 vectors and token counts exact against immutable original GPU reference; empty batch,413 and health recovery preserved",
+    "Compute Sanitizer geometry test: zero errors",
+    "Compute Sanitizer full real-checkpoint batch gate: passed in218.52s, zero errors; max process RSS2556420KiB, not total unified-memory accounting"
+  ],
+  "setup_failures": ["CPU offline check needed the missing locked accelerate-src crate; retried with normal locked dependency fetching and passed", "First new test compile had incorrect nested-module imports; corrected and all tests passed", "First full-model sanitizer invocation omitted EG2_MODEL_DIR, failed before CUDA; corrected environment and full memcheck passed"],
+  "limits": ["Performance claim is this pinned GB10/F32 workload, not every engine/model/device", "CPU/Metal/native/ONNX/Qwen3 behavior remains unchanged; no broader numerical tolerance was introduced", "Synthetic byte-equivalence does not measure general retrieval relevance", "No production installation, service restart, deployment or push"]
+}
