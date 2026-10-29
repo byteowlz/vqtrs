@@ -19,6 +19,8 @@ struct Input {
 struct Output {
     tokens: Option<usize>,
     bits: Vec<Vec<u32>>,
+    #[serde(skip)]
+    token_ms: f64,
 }
 
 #[derive(Serialize)]
@@ -26,6 +28,7 @@ struct Case {
     id: String,
     rows: usize,
     ms: Vec<f64>,
+    token_ms: Vec<f64>,
     iterations: Vec<usize>,
     output: Output,
 }
@@ -41,7 +44,9 @@ struct Report {
 }
 
 fn infer(engine: &Engine, texts: &[String]) -> Result<Output> {
+    let start = Instant::now();
     let tokens = engine.count_tokens(texts);
+    let token_ms = start.elapsed().as_secs_f64() * 1000.0;
     let vectors = engine.embed_batch(texts)?;
     ensure!(vectors.len() == texts.len(), "output row count changed");
     let mut bits = Vec::with_capacity(vectors.len());
@@ -50,7 +55,11 @@ fn infer(engine: &Engine, texts: &[String]) -> Result<Output> {
         ensure!(row.iter().all(|v| v.is_finite()), "non-finite output");
         bits.push(row.into_iter().map(f32::to_bits).collect());
     }
-    Ok(Output { tokens, bits })
+    Ok(Output {
+        tokens,
+        bits,
+        token_ms,
+    })
 }
 
 fn benchmark(engine: &Engine, id: String, texts: &[String]) -> Result<Case> {
@@ -59,14 +68,17 @@ fn benchmark(engine: &Engine, id: String, texts: &[String]) -> Result<Case> {
         black_box(infer(engine, texts)?);
     }
     let mut ms = Vec::with_capacity(5);
+    let mut token_ms = Vec::with_capacity(5);
     let mut iterations = Vec::with_capacity(5);
     for _ in 0..5 {
         let mut elapsed = std::time::Duration::ZERO;
+        let mut token_elapsed = 0.0;
         let mut count = 0;
         while elapsed.as_millis() < 200 {
             let start = Instant::now();
             let output = black_box(infer(engine, texts)?);
             elapsed += start.elapsed();
+            token_elapsed += output.token_ms;
             count += 1;
             ensure!(
                 output.tokens == expected.tokens && output.bits == expected.bits,
@@ -74,6 +86,7 @@ fn benchmark(engine: &Engine, id: String, texts: &[String]) -> Result<Case> {
             );
         }
         ms.push(elapsed.as_secs_f64() * 1000.0 / count as f64);
+        token_ms.push(token_elapsed / count as f64);
         iterations.push(count);
     }
     eprintln!("{id}: {ms:?} ms");
@@ -81,6 +94,7 @@ fn benchmark(engine: &Engine, id: String, texts: &[String]) -> Result<Case> {
         id,
         rows: texts.len(),
         ms,
+        token_ms,
         iterations,
         output: expected,
     })

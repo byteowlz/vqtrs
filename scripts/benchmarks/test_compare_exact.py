@@ -8,7 +8,7 @@ from compare_exact import compare
 
 def report():
     return {"model": "test", "backend": "CPU", "cases": [
-        {"id": "one", "rows": 1, "ms": [1.0, 2.0, 3.0],
+        {"id": "one", "rows": 1, "ms": [1.0, 2.0, 3.0], "token_ms": [0.1, 0.2, 0.3],
          "output": {"tokens": 4, "bits": [[1065353216, 0]]}}]}
 
 

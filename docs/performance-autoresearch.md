@@ -39,7 +39,9 @@ The workload reuses `scripts/parity/eg2_cases_text.json`. `short` explicitly ski
 policies still apply. Three warmups per shape; five timed samples, each averaging
 calls until at least 200 ms of measured time. Timings include token accounting,
 inference, host-vector completion and finite/output-bit materialization, but not
-model loading (reported separately). Every repeated result must have identical
+model loading (reported separately). Token accounting has its own phase timing,
+so savings there are not mistaken for a faster inference kernel.
+Every repeated result must have identical
 bits and token counts. Singleton, ragged batch and reversed batch outputs are
 recorded separately: a batch need not equal singleton arithmetic, but each must
 match its own baseline. This strict harness is intended for deterministic,
