@@ -147,6 +147,14 @@ eg2-frontend-reference OUT:
 eg2-reference CASES OUT:
     uv run --with transformers==5.19.0 --with sentence-transformers==6.1.0 --with torch==2.14.1 --with torchvision --with numpy==2.4.6 --with pillow==12.3.0 --with librosa --with soundfile --with av python -I scripts/parity/eg2_reference.py --cases "{{CASES}}" --out "{{OUT}}"
 
+# Dense-engine differential timing against existing text parity fixtures
+bench-engine MODEL REPORT SUITE="short":
+    cargo run --locked --release -p vqtrs-cli --example engine_bench -- "{{MODEL}}" scripts/parity/eg2_cases_text.json "{{REPORT}}" "{{SUITE}}"
+
+# Fail-closed exact comparison harness regression tests (no models/network)
+test-bench-compare:
+    uv run --no-project python -m unittest discover -s scripts/benchmarks -p 'test_compare_exact.py'
+
 # === Code Quality ===
 
 # Format all code
