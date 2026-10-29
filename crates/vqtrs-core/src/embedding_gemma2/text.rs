@@ -12,6 +12,9 @@ use super::ops::{
 #[cfg(all(test, feature = "embeddinggemma2-cuda"))]
 #[path = "text_cache_tests.rs"]
 mod cache_tests;
+#[cfg(test)]
+#[path = "window_tests.rs"]
+mod window_tests;
 
 const ROPE_CACHE_LENGTH: usize = 4096;
 
@@ -297,16 +300,11 @@ pub(super) fn sliding_window_mask(
     if seq <= window + 1 {
         return Ok(None);
     }
-    let mask: Vec<f32> = (0..seq)
-        .flat_map(|q| {
-            (0..seq).map(move |k| {
-                if q.abs_diff(k) <= window {
-                    0.0
-                } else {
-                    f32::MIN
-                }
-            })
-        })
-        .collect();
+    let mut mask = vec![f32::MIN; seq * seq];
+    for (q, row) in mask.chunks_exact_mut(seq).enumerate() {
+        let start = q.saturating_sub(window);
+        let end = q.saturating_add(window).saturating_add(1).min(seq);
+        row[start..end].fill(0.0);
+    }
     Tensor::from_vec(mask, (seq, seq), dev).map(Some)
 }

@@ -154,6 +154,29 @@ versus the earlier 3/4 MiB. Width/scalar-tail guards, non-CUDA behavior and the
 8192-token production cap are unchanged; sequences above 4096 use original
 construction. This is a warm-inference optimization, not a free-memory claim.
 
+The [final report](benchmarks/exact-speed-cuda-round3-2026-10-29.json) also retains
+a smaller allocation-only change: fill the mask with the same `f32::MIN` values,
+then write positive zero to each row's accepted interval. An independent scalar
+cell oracle verifies exact bytes. For 2262 rows, host vector capacity falls from
+9,265,152 to 5,116,644 floats; construction-only probes improve from about 7.7 ms
+to 0.32 ms. This is not a whole-engine speedup: its isolated full-workload gain
+is only about 0.3%, although that one case repeatedly improves about 3%.
+
+Combined, two final immutable-baseline ABBA repeats measure **1.046x** across all
+11 cases and **1.082x** on the four long cases. Original short cases remain
+unchanged within variation; every observed case ratio is reported. All 60 text
+rows, HTTP/CLI/UDS, 13 seeded media cases, boundary/error tests and geometry/full
+model memchecks remain exact/clean. The host mask builder is shared, but no
+CPU/Metal full-engine performance improvement is claimed.
+
+Final median model initialization was **1682 ms baseline / 1739 ms candidate**:
+about 57 ms more, with OS/compiler caches left intact. Keep this cold-load and
+21 MiB canonical persistent-memory trade-off visible; the win is warm inference.
+These gains cannot be multiplied into the earlier 15% short-suite result because
+the workload changed. Frozen evaluation version `vqtrs-exact-readout-eval/v3`
+records the derived fixture, paired captures and script/binary provenance.
+The non-evicting lease is released; no service deployment or push occurred.
+
 ## Isolated loop state
 
 Use an isolated reversible worktree for experiments. `.auto/prompt.md` records

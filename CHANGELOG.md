@@ -11,11 +11,16 @@ All notable changes to this project will be documented in this file.
   original short cases are unchanged. Constants now use 24 MiB for the pinned
   checkpoint, bounded by 32 MiB per model. The production context cap stays 8192;
   longer/incompatible inputs retain the original path.
+- Build sliding masks with exact row fills instead of growing per-cell
+  collections: about 3% faster on the 2262-token CUDA case, only 0.3% overall.
+  Combined round-three performance is 1.046x on the extended suite, not an
+  extra short-suite gain. Initialization was about 57 ms longer in final runs.
+  See `docs/benchmarks/exact-speed-cuda-round3-2026-10-29.json`.
 - Bounded CUDA positional-table reuse adds about 5% speedup over the previous
   EmbeddingGemma 2 optimization on pinned GB10 tests (about 15% over the original
   build, measured directly). Text/image/audio/video outputs stay bit-identical.
-  Vector-tail-incompatible geometries, CPU/Metal and sequences above 512 tokens
-  keep original construction; constant storage is capped at 4 MiB per model.
+  The initial cache retained original construction for incompatible geometries,
+  CPU/Metal and sequences above 512; its 4 MiB bound is extended as noted above.
   See `docs/benchmarks/exact-speed-cuda-round2-2026-10-29.json`.
 - EmbeddingGemma 2 CUDA text batches defer host readout in groups of at most
   eight independent F32 embeddings. Pinned GB10 tests measured about 9% lower

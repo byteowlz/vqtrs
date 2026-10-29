@@ -1,0 +1,333 @@
+{
+  "schema": "vqtrs.performance-experiment-summary.v1",
+  "status": "kept_exact_long_context_constants_and_rowwise_mask",
+  "date": "2026-10-29",
+  "baseline_commit": "f76430213",
+  "baseline_behavior": "Already-kept readout8/error-drain plus512-row positional cache; not the original serial implementation",
+  "hardware": "NVIDIA GB10 sm_120a, ARM Linux, CUDA13.0.88",
+  "build": "Rust1.97.0, Candle0.11.0, embeddinggemma2-cuda; model tensors F32; identical -C target-feature=+fp16 ARM codegen flag",
+  "resource": {
+    "claim_gib": 12,
+    "eviction": false,
+    "released": true,
+    "production_services_changed": false
+  },
+  "assets": {
+    "checkpoint": "google/embeddinggemma-2@914f7f89142e33e77833254d9c9b90c3cef7303b",
+    "weights_sha256": "197a32965d4b1105faf060417baa899e193fb73cd401f42ec9295234d5553d79",
+    "original_fixture_sha256": "ddc81d848622dcedb109b73a80d7f1a75c799345d150599b688c5e210a53f2c5",
+    "extended_fixture_sha256": "930cbb5e05bb1fcd1c67dd2a3d7a1c313e4bbc9ee174b9d3eff967b7d89f170b",
+    "baseline_binary_sha256": "075aea37f55268b1d8e2ca52cced32ba391dff2729639ffdc7b5ee79cc014204",
+    "cache_only_binary_sha256": "5958898d93248964ea10bfcf76b70a882f5183b00432a237b11911a88e5c8dac",
+    "qualified_binary_sha256": "8e3ac6a1a54c2bfb627cf7ac8dc9262177a6f2fb8feda3670ebe397dd5427511",
+    "qualified_text_source_sha256": "7c5b1f983206eca22488b786202c029af9de7673ab1df0b0dbc5360074cfb587",
+    "qualified_cli_sha256": "f441df75f2062dad01a5bc1adb5f5d56fcf68ea29eec279dd9f7948da3ee12b3"
+  },
+  "workload": {
+    "cases": 11,
+    "text_rows": 60,
+    "original_short_rows_preserved": 55,
+    "actual_long_tokens": [
+      953,
+      2024,
+      2262
+    ],
+    "derivation": "Whole-text repetition of original medium fixture, plus a953/2024-token ragged pair; frozen before production changes; no tokenizer truncation",
+    "generation": "scripts/benchmarks/extend_eg2_fixture.py; pinned tokenizers0.22.2; regenerated file matches original extended-fixture hash",
+    "warning": "New long-context segment; its suite sum is NOT comparable with previous short-only sums. Do not multiply this gain into the historical15% short-suite result."
+  },
+  "protocol": "Immutable binaries, ABBA, three warmups per case, five >=200ms trials per process, two repeats; pooled per-case median warm latency, synchronized host vectors, exact token/output-bit checks; no result cache",
+  "noise_control": {
+    "same_binary_speedup": 0.9993527375999226,
+    "worst_case_latency_ratio": 1.0310971966108815,
+    "changed_bits": 0
+  },
+  "candidates": [
+    {
+      "description": "2048-row positional bound",
+      "speedup": 1.0281348126260037,
+      "decision": "superseded by4096, not a separate cumulative gain"
+    },
+    {
+      "description": "4096-row positional bound",
+      "two_repeat_results": {
+        "baseline_ms": 1397.0795618860307,
+        "candidate_ms": 1343.3070331011904,
+        "speedup": 1.0400299614755233,
+        "changed_bits": 0,
+        "worst_case_ratio": 1.015710913061455,
+        "cases": {
+          "query-1": {
+            "baseline_ms": 9.471711431818182,
+            "candidate_ms": 9.620520666666668,
+            "speedup": 0.9845321017432994
+          },
+          "query-8": {
+            "baseline_ms": 66.84055075,
+            "candidate_ms": 66.913206,
+            "speedup": 0.9989141866853608
+          },
+          "docs-8": {
+            "baseline_ms": 85.80807616666667,
+            "candidate_ms": 85.85855649999999,
+            "speedup": 0.9994120523871919
+          },
+          "queries-4": {
+            "baseline_ms": 34.33542608333333,
+            "candidate_ms": 34.309134666666665,
+            "speedup": 1.0007663095243322
+          },
+          "text-medium": {
+            "baseline_ms": 15.518293192307693,
+            "candidate_ms": 15.346443535714284,
+            "speedup": 1.011198011851637
+          },
+          "text-near-cap": {
+            "baseline_ms": 31.193885428571427,
+            "candidate_ms": 31.274739357142856,
+            "speedup": 0.9974147209462526
+          },
+          "bulk-32": {
+            "baseline_ms": 346.5284005,
+            "candidate_ms": 346.4923495,
+            "speedup": 1.0001040455873038
+          },
+          "long-1024": {
+            "baseline_ms": 72.47478683333334,
+            "candidate_ms": 66.08360637499999,
+            "speedup": 1.0967135543733157
+          },
+          "long-2048": {
+            "baseline_ms": 208.274675,
+            "candidate_ms": 195.7533415,
+            "speedup": 1.0639648519103313
+          },
+          "long-2304": {
+            "baseline_ms": 249.0425515,
+            "candidate_ms": 233.3887175,
+            "speedup": 1.0670719397564707
+          },
+          "long-ragged-pair": {
+            "baseline_ms": 277.591205,
+            "candidate_ms": 258.2664175,
+            "speedup": 1.0748250108824158
+          }
+        },
+        "median_fresh_process_load_ms": {
+          "baseline": 1670.7798540000001,
+          "candidate": 1708.4238930000001
+        },
+        "short": {
+          "baseline_ms": 589.6963435526973,
+          "candidate_ms": 589.8149502261905,
+          "speedup": 0.9997989086688159
+        },
+        "long": {
+          "baseline_ms": 807.3832183333334,
+          "candidate_ms": 753.492082875,
+          "speedup": 1.0715218337168295
+        }
+      },
+      "decision": "kept;24MiB canonical/32MiB maximum constants"
+    },
+    {
+      "description": "Prefilled MIN mask plus rowwise positive-zero fill",
+      "two_repeat_results": {
+        "baseline_ms": 1340.4135073818682,
+        "candidate_ms": 1336.0228274404762,
+        "speedup": 1.0032863809294363,
+        "changed_bits": 0,
+        "worst_case_ratio": 1.004579134296766,
+        "cases": {
+          "query-1": {
+            "baseline_ms": 9.575900404761905,
+            "candidate_ms": 9.571986333333333,
+            "speedup": 1.000408909007208
+          },
+          "query-8": {
+            "baseline_ms": 66.836288,
+            "candidate_ms": 66.77926049999999,
+            "speedup": 1.0008539702232853
+          },
+          "docs-8": {
+            "baseline_ms": 85.32590383333334,
+            "candidate_ms": 85.45246083333333,
+            "speedup": 0.9985189777009836
+          },
+          "queries-4": {
+            "baseline_ms": 34.16559183333334,
+            "candidate_ms": 34.322040666666666,
+            "speedup": 0.99544173859437
+          },
+          "text-medium": {
+            "baseline_ms": 15.369286739010988,
+            "candidate_ms": 15.343692571428573,
+            "speedup": 1.001668057898271
+          },
+          "text-near-cap": {
+            "baseline_ms": 31.230772571428567,
+            "candidate_ms": 31.178703285714285,
+            "speedup": 1.0016700273015569
+          },
+          "bulk-32": {
+            "baseline_ms": 345.1471825,
+            "candidate_ms": 346.0703505,
+            "speedup": 0.9973324267777743
+          },
+          "long-1024": {
+            "baseline_ms": 65.86966924999999,
+            "candidate_ms": 66.15251375,
+            "speedup": 0.9957243574889849
+          },
+          "long-2048": {
+            "baseline_ms": 195.74139275,
+            "candidate_ms": 195.8453275,
+            "speedup": 0.9994693018652692
+          },
+          "long-2304": {
+            "baseline_ms": 233.61094500000002,
+            "candidate_ms": 227.05235449999998,
+            "speedup": 1.0288858070397153
+          },
+          "long-ragged-pair": {
+            "baseline_ms": 257.5405745,
+            "candidate_ms": 258.254137,
+            "speedup": 0.9972369755300377
+          }
+        },
+        "median_fresh_process_load_ms": {
+          "baseline": 1719.2120455,
+          "candidate": 1675.3608179999999
+        },
+        "short": {
+          "baseline_ms": 587.6509258818681,
+          "candidate_ms": 588.7184946904762,
+          "speedup": 0.9981866226078573
+        },
+        "long": {
+          "baseline_ms": 752.7625815,
+          "candidate_ms": 747.30433275,
+          "speedup": 1.0073039169061342
+        }
+      },
+      "decision": "kept narrowly: about2.8% gain on2262-token case, only~0.3% aggregate; exact mask bytes and fewer staging allocations, no additional persistent cache",
+      "allocation_probe": {
+        "rows": 2262,
+        "old_vec_capacity_floats": 9265152,
+        "new_vec_capacity_floats": 5116644,
+        "old_build_ms_approx": 7.7,
+        "new_build_ms_approx": 0.32,
+        "scope": "Standalone same-toolchain host construction probe, not whole-engine speedup"
+      }
+    }
+  ],
+  "repeat_speedups": [
+    1.045987481227685,
+    1.0457087708382884
+  ],
+  "combined_repeats": {
+    "baseline_ms": 1403.5939008690477,
+    "candidate_ms": 1342.1453238403265,
+    "speedup": 1.0457838476484025,
+    "changed_bits": 0,
+    "worst_case_ratio": 1.0109006605867934,
+    "cases": {
+      "query-1": {
+        "baseline_ms": 9.651868285714286,
+        "candidate_ms": 9.500060795454544,
+        "speedup": 1.015979633554806
+      },
+      "query-8": {
+        "baseline_ms": 67.1783945,
+        "candidate_ms": 67.1879495,
+        "speedup": 0.9998577869979496
+      },
+      "docs-8": {
+        "baseline_ms": 85.94353616666666,
+        "candidate_ms": 86.13993383333333,
+        "speedup": 0.997720016049157
+      },
+      "queries-4": {
+        "baseline_ms": 34.32801858333333,
+        "candidate_ms": 34.48347375,
+        "speedup": 0.9954918936591569
+      },
+      "text-medium": {
+        "baseline_ms": 15.338942357142857,
+        "candidate_ms": 15.50614696153846,
+        "speedup": 0.9892168825169567
+      },
+      "text-near-cap": {
+        "baseline_ms": 31.24338314285714,
+        "candidate_ms": 31.2256305,
+        "speedup": 1.0005685279231475
+      },
+      "bulk-32": {
+        "baseline_ms": 347.569312,
+        "candidate_ms": 347.512029,
+        "speedup": 1.0001648374594827
+      },
+      "long-1024": {
+        "baseline_ms": 72.31454433333334,
+        "candidate_ms": 66.3132765,
+        "speedup": 1.0904987379613695
+      },
+      "long-2048": {
+        "baseline_ms": 210.0882845,
+        "candidate_ms": 196.6554605,
+        "speedup": 1.0683063870479201
+      },
+      "long-2304": {
+        "baseline_ms": 250.707158,
+        "candidate_ms": 228.2846975,
+        "speedup": 1.0982214784676927
+      },
+      "long-ragged-pair": {
+        "baseline_ms": 279.230459,
+        "candidate_ms": 259.33666500000004,
+        "speedup": 1.07671030241713
+      }
+    },
+    "median_fresh_process_load_ms": {
+      "baseline": 1682.031172,
+      "candidate": 1738.706209
+    },
+    "short": {
+      "baseline_ms": 591.2534550357143,
+      "candidate_ms": 591.5552243403263,
+      "speedup": 0.9994898712880974
+    },
+    "long": {
+      "baseline_ms": 812.3404458333333,
+      "candidate_ms": 750.5900995000001,
+      "speedup": 1.0822690658649345
+    }
+  },
+  "tradeoffs": {
+    "canonical_constant_mib_before": 3,
+    "canonical_constant_mib_after": 24,
+    "maximum_constant_mib": 32,
+    "median_fresh_process_load_ms": {
+      "baseline": 1682.031172,
+      "candidate": 1738.706209
+    },
+    "load_note": "Candidate observed about57ms/~3.4% more model initialization in final repeats. OS/compiler caches were not cleared; no causal startup improvement claimed. This is a warm-inference optimization.",
+    "short_note": "Original short sum unchanged within variation; report includes every case, including observed worst latency ratio1.0109. No extra short-suite win is claimed."
+  },
+  "checks": [
+    "Default and CPU-feature Rust format/check/strict Clippy/workspace tests; comparator regression tests",
+    "CUDA workspace check/strict Clippy/tests; five existing GPU operation tests",
+    "Model-free positional prefixes and fallback: widths6/8/256/512/520, both attention kinds, lengths through4096/4097, scalar tails, missing parameters and CPU no-cache",
+    "Independent cellwise scalar mask oracle: sequence lengths0..36 and windows0/1/2/7/16/32/64; exact0.0/MIN bits",
+    "Real-checkpoint batch boundaries/reversal/duplicates/long-ragged/oversize/error recovery",
+    "Seven images, five existing synthetic audio cases and one two-frame video: zero changed bits versus previous optimized CLI",
+    "HTTP60+CLI/UDS60 vectors and token counts exact versus immutable round-three baseline; empty batch,413 and health preserved; owned server reaped",
+    "Compute Sanitizer geometry and full real-model batch gate: zero errors; full gate214.71seconds"
+  ],
+  "limits": [
+    "GB10/F32 synthetic diagnostic only; no general retrieval-quality or cross-engine/hardware claim",
+    "Non-CUDA positional construction unchanged; shared host mask construction produces identical bytes, but no CPU/Metal full-engine performance improvement claimed",
+    "Production8192-token cap, precision, model, readout8 and error-drain ownership unchanged; above4096 positional construction falls back",
+    "No deployment, installation, production restart, registry publication or push"
+  ]
+}
