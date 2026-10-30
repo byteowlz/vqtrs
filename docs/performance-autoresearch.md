@@ -215,6 +215,46 @@ Rust functionality or proof of lossless equivalence. Its author-reported tiny
 sample is not our qualification; int8 is not a lossless candidate. No ONNX
 comparison was run in this round.
 
+## Python fastembed PR comparison, 2026-10-30
+
+The [comparison report](benchmarks/fastembed-eg2-comparison-2026-10-30.json)
+measures pinned PR790 F32 export against `ba81bbe`, not a production upgrade.
+Same 11 cases/60 rows, complete effective token identity, 768 components checked.
+Private environment: Python 3.13.11, ORT GPU 1.31.1, TF32 explicitly disabled.
+Heavy audited NN nodes execute on CUDA; 16 shape-related nodes execute on CPU.
+CPU runs use eight threads on the same eight fast cores in both runtimes.
+
+| Provider / mode | Candle suite | Python suite | Speedup |
+| --- | ---: | ---: | ---: |
+| CUDA, independent rows | 1317 ms | 1079 ms | 1.22x |
+| CUDA, actual padded batches | 1317 ms | 875 ms | 1.50x |
+| CPU, independent rows | 25549 ms | 6229 ms | 4.10x |
+| CPU, actual padded batches | 25549 ms | 6792 ms | 3.76x |
+
+These are sums of per-case median batch latencies, not traffic-weighted averages.
+Two mirrored CUDA campaigns and one CPU campaign retain all cases. Uniform GPU
+batches improve about 5-7x, but the long ragged pair regresses: 336 ms batched
+Python versus 256 ms Candle; independent Python takes 214 ms. Keep padding costs
+visible. Libraries and graph transformations differ; this is not a claim that
+Python is intrinsically faster than Rust. PR-default fetching of both hidden
+states and pooled embeddings was retained, not silently optimized.
+
+All 413 source text parameters are accounted under exact weight packing,
+embedding pre-scaling and final-scalar absorption into norm epsilon. This does
+not preserve identical graph arithmetic. Saved vector differences are about
+1e-7 on CUDA and below 4e-7 on CPU, with extremely close cosines, but outputs are
+**not bit-identical**. Default CUDA repeats vary by up to 5.96e-8. A separate
+ORT deterministic-compute probe removes variation on two ten-call long cases;
+it is not part of the measured timings or a universal guarantee.
+
+Compatibility also differs: Python silently truncates oversized input to 8192,
+where vqtrs rejects it. Empty batches/reversal pass. No labelled retrieval quality
+was evaluated. The text-only ONNX graph and full multimodal Candle load are not
+capability-equivalent cold-start/memory comparisons. This is a promising optional
+text backend candidate, not an approved lossless replacement. No production code
+or dependencies were changed. The lease is released; frozen evidence lives in
+`vqtrs-fastembed-eg2-compare/v1`.
+
 ## Isolated loop state
 
 Use an isolated reversible worktree for experiments. `.auto/prompt.md` records
