@@ -89,6 +89,8 @@ just test-archive-contract
 A real archive probe uses `uv run --no-project python -I
 scripts/ci/archive_smoke.py --cli <extracted-vqtrs> --api <extracted-vqtrs-api>`
 on an isolated, adequately provisioned runner, not a production service.
+Keep Unix probe work directories short (for example `/tmp/vqtrs-smoke`): deeply
+nested checkout paths can exceed the platform's Unix socket path limit.
 It uses synthetic texts, downloads a public ONNX model, and terminates/reaps its
 own temporary API. Model vectors are not included in the public probe report.
 

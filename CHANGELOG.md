@@ -4,6 +4,28 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+## [0.4.0] - 2026-10-30
+
+Minor release for additive core APIs and qualified CUDA performance improvements.
+Default archives remain ONNX-only; optional GPU/native backends need source builds.
+The Python ONNX comparison is evaluation evidence, not a newly shipped backend.
+
+### Added
+
+- Resident `EmbeddingGemma2::embed_text_tensor` readout for same-device downstream
+  heads, with caller-owned final validation and no implicit host-vector download.
+- Bounded RGB decode/resize and reusable exact CPU arithmetic mechanics for
+  optional native consumers. These APIs do not inherit another model's numerical
+  qualification; the reviewed Torch notice is retained with the source.
+- Reproducible differential timing, token/bit, geometry, media, transport and
+  sanitizer evidence, plus a separate pinned Python fastembed F32 comparison.
+
+### Fixed
+
+- The release helper now creates an annotated tag, as required by publication
+  gates, and pushes only the requested tag instead of every local tag. An
+  isolated local-remote regression checks both properties.
+
 ### Performance
 
 - Fold rotary activation signs into the existing CUDA positional constants,
