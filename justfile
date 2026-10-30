@@ -256,8 +256,8 @@ release: build-release
 
 # Tag and push a release
 release-tag VERSION:
-    git tag v{{VERSION}}
-    git push --tags
+    git tag --annotate "v{{VERSION}}" --message "Release v{{VERSION}}"
+    git push origin "refs/tags/v{{VERSION}}"
 
 # Set up GitHub secrets for automated releases (requires byt)
 setup-secrets:
