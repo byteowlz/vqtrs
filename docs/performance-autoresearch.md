@@ -177,6 +177,44 @@ the workload changed. Frozen evaluation version `vqtrs-exact-readout-eval/v3`
 records the derived fixture, paired captures and script/binary provenance.
 The non-evicting lease is released; no service deployment or push occurred.
 
+## Round four: exact sign folding
+
+The [round-four report](benchmarks/exact-speed-cuda-round4-2026-10-30.json) freezes
+round three as the baseline and retains the same 11 cases/60 rows. Negating the
+first sine half once in cached constants eliminates repeated activation
+negations: `(-x) * sin` becomes `x * (-sin)`. Both products and the final addition
+remain separate F32 operations, not a fused rotary kernel. Table interpretation
+is explicit; CPU/Metal and uncached sequences keep the original rotation.
+
+Two final ABBA repeats measure **1.015x additional suite speedup**, **1.022x** on
+the short subset and **1.010x** on long cases. Every measured embedding bit stays
+identical. Constant table storage remains 24 MiB canonical/32 MiB maximum; no
+result cache is added. Initialization medians were 1765/1736 ms, with caches
+intact; no causal startup improvement is claimed. A cached index permutation
+was rejected: 0.04% aggregate gain was below variation and added complexity.
+
+Decoded cache geometry, independent original/folded CUDA operator bits (including
+signed zero, subnormals, infinities and NaN inputs), complete text/media/transport
+checks and three memchecks pass. The full-model memcheck took 212.4 seconds with
+zero errors. The API-only profile motivates dispatch reduction but contains no
+GPU kernel timings; do not claim measured per-kernel heat from it. Evaluation
+version `vqtrs-exact-readout-eval/v4` retains frozen paired captures. Lease
+released, production untouched, no deployment or push.
+
+### Fastembed availability checked 2026-10-30
+
+Rust main `d6c7d91b` (Cargo version 7.5.0) still lists the older
+`EmbeddingGemma300M` variants, not Gemma 2. The locked vqtrs dependency is 5.17.3;
+no upgrade was made. Python main `f91d9168` likewise lists the old model.
+Open, unmerged proposal: https://github.com/qdrant/fastembed/pull/790
+
+PR head `d47ea52a` proposes text-only F32 and int8 ONNX models, empty modality
+feature inputs and an explicit 8192-token fallback for the tokenizer sentinel.
+A pinned F32 PR/export is a possible separate benchmark, not already-supported
+Rust functionality or proof of lossless equivalence. Its author-reported tiny
+sample is not our qualification; int8 is not a lossless candidate. No ONNX
+comparison was run in this round.
+
 ## Isolated loop state
 
 Use an isolated reversible worktree for experiments. `.auto/prompt.md` records

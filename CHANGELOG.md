@@ -6,6 +6,11 @@ All notable changes to this project will be documented in this file.
 
 ### Performance
 
+- Fold rotary activation signs into the existing CUDA positional constants,
+  preserving separate F32 products/addition and exact tested outputs. Round four
+  measures 1.015x on the extended suite and 1.022x on its short subset versus
+  round three, with unchanged table storage. CPU/Metal and uncached rotations
+  retain their original path. See `docs/benchmarks/exact-speed-cuda-round4-2026-10-30.json`.
 - Extend exact CUDA positional reuse to 4096 tokens. On a separately declared
   long-context diagnostic, cache-only GB10/F32 captures improve about 4% overall;
   original short cases are unchanged. Constants now use 24 MiB for the pinned

@@ -1,0 +1,165 @@
+{
+  "schema": "vqtrs.performance-experiment-summary.v1",
+  "status": "kept_exact_cached_rope_sign_folding",
+  "date": "2026-10-30",
+  "baseline_commit": "76d1bcd50",
+  "baseline_behavior": "Previously kept readout8/error drain,4096-row positional cache and rowwise mask fill",
+  "hardware": "NVIDIA GB10 sm_120a, ARM Linux; Rust1.97.0/Candle0.11.0/CUDA13.0.88",
+  "build": "embeddinggemma2-cuda; model tensors F32; identical -C target-feature=+fp16 ARM codegen flag",
+  "resource": {
+    "claim_gib": 12,
+    "eviction": false,
+    "released": true,
+    "production_services_changed": false
+  },
+  "assets": {
+    "checkpoint": "google/embeddinggemma-2@914f7f89142e33e77833254d9c9b90c3cef7303b",
+    "weights_sha256": "197a32965d4b1105faf060417baa899e193fb73cd401f42ec9295234d5553d79",
+    "fixture_sha256": "930cbb5e05bb1fcd1c67dd2a3d7a1c313e4bbc9ee174b9d3eff967b7d89f170b",
+    "baseline_binary_sha256": "8e3ac6a1a54c2bfb627cf7ac8dc9262177a6f2fb8feda3670ebe397dd5427511",
+    "qualified_binary_sha256": "b036e64d5f8dfff1a3195e4af0cf0fb8a7ecf2909a5a3072a5fc59e09c8d7882",
+    "qualified_cli_sha256": "b32861329af6fc01bbf51d5f3a975bc4129797ce12d828313996a8e6f4596ee1",
+    "qualified_ops_source_sha256": "b29ff790ca25f252ee8b754a3ec5d70479fe3eac4488d99958b07d4d429af6f4",
+    "qualified_text_source_sha256": "414cf99717bd5aa440dbd057953b1ee70eb79d5be2e2a9f754d09e002b8e02a3",
+    "qualified_test_source_sha256": "94a6d91bfe92718865dba81835ba272defce404c89b3469871cd438a6b61ca1c"
+  },
+  "change": {
+    "description": "Negate the first half of cached sine constants at construction; rotate activations without per-layer negation. Keep both F32 products and final addition separate, no FMA/reduction reassociation.",
+    "scope": "Eligible CUDA cached sequences only. Original CPU/Metal and uncached/incompatible/larger sequences retain original rotation. Internal table representation changes intentionally; interpreted constants and complete output bits are checked.",
+    "memory": "Same24MiB canonical/32MiB maximum tensor tables, no additional persistent tensor storage. Tiny representation metadata only; no result cache.",
+    "unchanged": "Model/precision/prompts/tokenization/8192-token production cap/readout8/error-drain ownership"
+  },
+  "protocol": "Same fixed11cases/60rows as round3, immutable-baseline ABBA, three warmups/case, five >=200ms timed trials/process, two final repeats. Pooled per-case medians of completed host vectors; exact tokens/bits/finite gates.",
+  "profiling": {
+    "observed": "CUDA API trace: cuLaunchKernel33.4% of summed API host time, async allocation12.1%, HtoD11.4%; motivates reducing dispatch/allocation work.",
+    "limitation": "Nsight trace contained API data but no GPU kernel timing records. No individual-kernel GPU heat attribution or speed claim is inferred from it. Profiled timings are excluded from primary metrics."
+  },
+  "noise_control": {
+    "speedup": 1.0023402228301868,
+    "worst_case_ratio": 1.0021846566043624,
+    "changed_bits": 0
+  },
+  "exploratory_sign_fold_repeat_speedups": [
+    1.0131277629594029,
+    1.0134558987099804
+  ],
+  "discarded": [
+    {
+      "description": "Cached half-rotation index_select instead of concatenation",
+      "speedup": 1.0004271609963569,
+      "changed_bits": 0,
+      "reason": "About0.04% aggregate, below observed variation; adds indices/complexity. Restored original concatenation for kept candidate."
+    }
+  ],
+  "final_repeat_speedups": [
+    1.0159608021523363,
+    1.0119839210528963
+  ],
+  "combined_repeats": {
+    "baseline_ms": 1346.9660146625458,
+    "candidate_ms": 1327.1407207007576,
+    "speedup": 1.014938351037349,
+    "changed_bits": 0,
+    "worst_case_ratio": 0.9956496300563792,
+    "cases": {
+      "query-1": {
+        "baseline_ms": 9.585890928571429,
+        "candidate_ms": 9.338025159090908,
+        "speedup": 1.0265437033267377
+      },
+      "query-8": {
+        "baseline_ms": 67.22862649999999,
+        "candidate_ms": 65.32147125,
+        "speedup": 1.0291964527666695
+      },
+      "docs-8": {
+        "baseline_ms": 86.25326683333333,
+        "candidate_ms": 84.41056433333333,
+        "speedup": 1.0218302355226918
+      },
+      "queries-4": {
+        "baseline_ms": 34.47936358333334,
+        "candidate_ms": 33.49137408333333,
+        "speedup": 1.0294998197906626
+      },
+      "text-medium": {
+        "baseline_ms": 15.421511692307693,
+        "candidate_ms": 15.144130964285715,
+        "speedup": 1.0183160544950465
+      },
+      "text-near-cap": {
+        "baseline_ms": 31.308650999999998,
+        "candidate_ms": 31.172446785714286,
+        "speedup": 1.0043693783558925
+      },
+      "bulk-32": {
+        "baseline_ms": 348.93007,
+        "candidate_ms": 341.775087,
+        "speedup": 1.0209347704737766
+      },
+      "long-1024": {
+        "baseline_ms": 66.278822875,
+        "candidate_ms": 65.257433125,
+        "speedup": 1.015651699754165
+      },
+      "long-2048": {
+        "baseline_ms": 197.26517124999998,
+        "candidate_ms": 196.04393050000002,
+        "speedup": 1.0062294239198595
+      },
+      "long-2304": {
+        "baseline_ms": 229.4665235,
+        "candidate_ms": 228.2328465,
+        "speedup": 1.0054053437921784
+      },
+      "long-ragged-pair": {
+        "baseline_ms": 260.7481165,
+        "candidate_ms": 256.95341099999996,
+        "speedup": 1.0147680682082871
+      }
+    },
+    "median_fresh_process_load_ms": {
+      "baseline": 1765.138332,
+      "candidate": 1735.758327
+    },
+    "short": {
+      "baseline_ms": 593.2073805375458,
+      "candidate_ms": 580.6530995757576,
+      "speedup": 1.0216209660655575
+    },
+    "long": {
+      "baseline_ms": 753.758634125,
+      "candidate_ms": 746.487621125,
+      "speedup": 1.009740299496249
+    }
+  },
+  "load_note": "Fresh initialization monitored with OS/compiler caches intact; no causal startup improvement claimed.",
+  "checks": [
+    "Default/CPU/CUDA format/check/strict Clippy/workspace tests and comparator regression tests",
+    "Canonical-versus-folded table geometry with original SIMD/scalar-tail and missing-parameter guards; through4096/4097 and CPU no-cache",
+    "Independent CUDA original-versus-folded rotary operator bits across widths6/8/256/512 and varied heads/lengths, both theta values; signed zeros, subnormals, extremes, infinities and NaN payload inputs",
+    "Real checkpoint boundaries/order/reversal/duplicates/long ragged/oversize/recovery and five existing GPU operation tests",
+    "Seven images/five synthetic audio/one two-frame video exact against immutable previous optimized CLI",
+    "HTTP60+CLI/UDS60 vectors and token counts exact; empty batch,413 and health preserved; disposable server reaped",
+    "Compute Sanitizer geometry, folded operator and full-model batch gates: zero errors; full-model gate212.40seconds"
+  ],
+  "setup_corrections": [
+    "New CUDA-only test lints required borrowing the oracle tuple and using mul_add only in an exactly dyadic synthetic input generator; production arithmetic remains separate. All strict lints subsequently passed."
+  ],
+  "fastembed_check": {
+    "date": "2026-10-30",
+    "rust_head": "d6c7d91bc12834889b7247ae01e8a1634a239639",
+    "rust_status": "Main Cargo version7.5.0 model catalog has old EmbeddingGemma300M variants, no builtin Gemma2; vqtrs remains on locked5.17.3.",
+    "python_main": "f91d9168c0291daeafb0a54cebc7c5b4b83f312f; builtin sentence list still old300m",
+    "proposal": "https://github.com/qdrant/fastembed/pull/790",
+    "state": "open, unmerged at inspection",
+    "pr_head": "d47ea52a4af4cf326e9480c4735a14cf60eef242",
+    "scope": "Proposes F32(~1.08GB) and int8(~0.31GB) text-only ONNX models with empty modality inputs and8192-token sentinel handling.",
+    "benchmark_option": "Pinned PR F32 export can be evaluated separately; no ONNX benchmark/upgrade performed here, no lossless equivalence inferred from author claims."
+  },
+  "limits": [
+    "Pinned GB10/F32 diagnostic, not every engine/device or general retrieval-quality proof",
+    "No multiplication with older aggregate gains; compare each cohort against its immutable baseline",
+    "No deployment, installation, production restart, package publication or push"
+  ]
+}

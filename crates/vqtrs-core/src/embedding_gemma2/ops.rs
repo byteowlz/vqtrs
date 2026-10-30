@@ -112,6 +112,36 @@ pub fn rope_tables(
     base: f64,
     dev: &Device,
 ) -> Result<(Tensor, Tensor)> {
+    let (cos, sin) = rope_values(seq, head_dim, base);
+    Ok((
+        from_host(cos, &[seq, head_dim], dev)?,
+        from_host(sin, &[seq, head_dim], dev)?,
+    ))
+}
+
+/// Same tables, with the first sine half negated for unsigned half rotation.
+pub(super) fn folded_rope_tables(
+    seq: usize,
+    head_dim: usize,
+    base: f64,
+    dev: &Device,
+) -> Result<(Tensor, Tensor)> {
+    if head_dim == 0 || !head_dim.is_multiple_of(2) {
+        candle_core::bail!("folded rotary width must be positive and even");
+    }
+    let (cos, mut sin) = rope_values(seq, head_dim, base);
+    for row in sin.chunks_exact_mut(head_dim) {
+        for value in &mut row[..head_dim / 2] {
+            *value = -*value;
+        }
+    }
+    Ok((
+        from_host(cos, &[seq, head_dim], dev)?,
+        from_host(sin, &[seq, head_dim], dev)?,
+    ))
+}
+
+fn rope_values(seq: usize, head_dim: usize, base: f64) -> (Vec<f32>, Vec<f32>) {
     let half = head_dim / 2;
     let mut inv_freq: Vec<f32> = (0..half)
         .map(|i| (2 * i) as f32 / head_dim as f32)
@@ -130,10 +160,7 @@ pub fn rope_tables(
     let mut cos = emb.clone();
     torch_cpu::cos(&mut cos);
     torch_cpu::sin(&mut emb);
-    Ok((
-        from_host(cos, &[seq, head_dim], dev)?,
-        from_host(emb, &[seq, head_dim], dev)?,
-    ))
+    (cos, emb)
 }
 
 /// `matmul(x, w^T)` for a 2-D `x` of shape `(n, in)` and `w` of `(out, in)`.

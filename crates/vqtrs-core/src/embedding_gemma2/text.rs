@@ -1,12 +1,13 @@
 //! EmbeddingGemma 2 text backbone: a bidirectional Gemma encoder with
 //! per-layer embeddings (PLE) and a final projection to the embedding width.
 
-use candle_core::{Device, Result, Tensor};
+use candle_core::{D, Device, Result, Tensor};
 use candle_nn::VarBuilder;
 
 use super::config::{LayerGeometry, LayerType, TextConfig};
 use super::ops::{
-    apply_rope, gelu_tanh, linear, mul_scalar, rms_norm, rope_tables, softmax_last_dim,
+    apply_rope, folded_rope_tables, gelu_tanh, linear, mul_scalar, rms_norm, rope_tables,
+    softmax_last_dim,
 };
 
 #[cfg(all(test, feature = "embeddinggemma2-cuda"))]
@@ -17,6 +18,28 @@ mod cache_tests;
 mod window_tests;
 
 const ROPE_CACHE_LENGTH: usize = 4096;
+
+struct RotaryTables {
+    cos: Tensor,
+    sin: Tensor,
+    folded: bool,
+}
+
+impl RotaryTables {
+    fn apply(&self, x: &Tensor) -> Result<Tensor> {
+        if !self.folded {
+            return apply_rope(x, &self.cos, &self.sin);
+        }
+        // (-x2) * sin and x2 * (-sin) have identical F32 products. Keep
+        // both multiplies and the final add separate: no FMA/reassociation.
+        let half = x.dim(D::Minus1)? / 2;
+        let first = x.narrow(D::Minus1, 0, half)?;
+        let second = x.narrow(D::Minus1, half, half)?;
+        let rotated = Tensor::cat(&[&second, &first], D::Minus1)?;
+        x.broadcast_mul(&self.cos)?
+            .add(&rotated.broadcast_mul(&self.sin)?)
+    }
+}
 
 struct Attention {
     q: Tensor,
@@ -53,7 +76,7 @@ impl Attention {
     fn forward(
         &self,
         x: &Tensor,
-        rope: &(Tensor, Tensor),
+        rope: &RotaryTables,
         mask: Option<&Tensor>,
         eps: f32,
     ) -> Result<Tensor> {
@@ -63,8 +86,8 @@ impl Attention {
         let q = rms_norm(&heads(&self.q, self.num_heads)?, Some(&self.q_norm), eps)?;
         let k = rms_norm(&heads(&self.k, nkv)?, Some(&self.k_norm), eps)?;
         let v = rms_norm(&heads(&self.v, nkv)?, None, eps)?;
-        let q = apply_rope(&q, &rope.0, &rope.1)?.contiguous()?;
-        let k = repeat_kv(&apply_rope(&k, &rope.0, &rope.1)?, self.num_heads / nkv)?;
+        let q = rope.apply(&q)?.contiguous()?;
+        let k = repeat_kv(&rope.apply(&k)?, self.num_heads / nkv)?;
         let v = repeat_kv(&v, self.num_heads / nkv)?;
         // EmbeddingGemma 2 attends with scaling = 1.0. `k^T` stays a transposed
         // view, so the GEMM is called with `transa = 'T'` like the reference.
@@ -132,7 +155,7 @@ impl Layer {
         &self,
         x: &Tensor,
         ple_in: &Tensor,
-        rope: &(Tensor, Tensor),
+        rope: &RotaryTables,
         mask: Option<&Tensor>,
         eps: f32,
     ) -> Result<Tensor> {
@@ -167,7 +190,7 @@ pub struct TextModel {
     cfg: TextConfig,
     eps: f32,
     // CUDA-only, bounded positional constants; never caches inference results.
-    rope_cache: Option<[(Tensor, Tensor); 2]>,
+    rope_cache: Option<[RotaryTables; 2]>,
 }
 
 impl TextModel {
@@ -212,8 +235,8 @@ impl TextModel {
             });
         if vb.device().is_cuda() && cacheable {
             model.rope_cache = Some([
-                model.rope(LayerType::SlidingAttention, ROPE_CACHE_LENGTH, vb.device())?,
-                model.rope(LayerType::FullAttention, ROPE_CACHE_LENGTH, vb.device())?,
+                model.cached_rope(LayerType::SlidingAttention, vb.device())?,
+                model.cached_rope(LayerType::FullAttention, vb.device())?,
             ]);
         }
         Ok(model)
@@ -270,22 +293,43 @@ impl TextModel {
         )
     }
 
-    fn rope(&self, layer_type: LayerType, seq: usize, dev: &Device) -> Result<(Tensor, Tensor)> {
+    fn cached_rope(&self, kind: LayerType, dev: &Device) -> Result<RotaryTables> {
+        let missing = || candle_core::Error::Msg(format!("no RoPE parameters for {kind:?}"));
+        let theta = self.cfg.rope_theta(kind).ok_or_else(missing)?;
+        let width = self.cfg.head_dim_for(kind).ok_or_else(missing)?;
+        let (cos, sin) = folded_rope_tables(ROPE_CACHE_LENGTH, width, theta, dev)?;
+        Ok(RotaryTables {
+            cos,
+            sin,
+            folded: true,
+        })
+    }
+
+    fn rope(&self, layer_type: LayerType, seq: usize, dev: &Device) -> Result<RotaryTables> {
         if seq <= ROPE_CACHE_LENGTH
             && let Some(cache) = &self.rope_cache
         {
-            let (cos, sin) = match layer_type {
+            let cached = match layer_type {
                 LayerType::SlidingAttention => &cache[0],
                 LayerType::FullAttention => &cache[1],
             };
-            if cos.device().same_device(dev) {
-                return Ok((cos.narrow(0, 0, seq)?, sin.narrow(0, 0, seq)?));
+            if cached.cos.device().same_device(dev) {
+                return Ok(RotaryTables {
+                    cos: cached.cos.narrow(0, 0, seq)?,
+                    sin: cached.sin.narrow(0, 0, seq)?,
+                    folded: true,
+                });
             }
         }
         let missing = || candle_core::Error::Msg(format!("no RoPE parameters for {layer_type:?}"));
         let theta = self.cfg.rope_theta(layer_type).ok_or_else(missing)?;
         let head_dim = self.cfg.head_dim_for(layer_type).ok_or_else(missing)?;
-        rope_tables(seq, head_dim, theta, dev)
+        let (cos, sin) = rope_tables(seq, head_dim, theta, dev)?;
+        Ok(RotaryTables {
+            cos,
+            sin,
+            folded: false,
+        })
     }
 }
 
