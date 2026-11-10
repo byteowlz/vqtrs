@@ -12,6 +12,11 @@ The Python ONNX comparison is evaluation evidence, not a newly shipped backend.
 
 ### Added
 
+- Sparse, BGE-M3 and rerank engines now have a differential benchmark
+  (`engine_aux_bench`) with per-case medians and exact repeat equality, matching
+  the dense harness. First five-engine qualification capture records exact outputs
+  across processes and an explicitly provisional timing envelope measured under
+  unrelated host load. See `docs/benchmarks/engine-qualification-2026-11-10.json`.
 - Resident `EmbeddingGemma2::embed_text_tensor` readout for same-device downstream
   heads, with caller-owned final validation and no implicit host-vector download.
 - Bounded RGB decode/resize and reusable exact CPU arithmetic mechanics for

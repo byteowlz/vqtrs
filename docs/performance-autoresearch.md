@@ -255,6 +255,36 @@ text backend candidate, not an approved lossless replacement. No production code
 or dependencies were changed. The lease is released; frozen evidence lives in
 `vqtrs-fastembed-eg2-compare/v1`.
 
+## Engine qualification: first five-engine baseline (2026-11-10)
+
+Stage one of the remaining qualification work covers the engines that had no
+measured baseline: ONNX dense (MiniLM), Qwen3-Embedding 0.6B (candle CPU),
+SPLADE sparse, BGE-M3 dense+sparse, and the BGE reranker. Each engine ran four
+separate processes over the existing short parity suite, and every output was
+compared **exactly** across processes.
+
+**Exactness passes for all five.** Sparse indices and weights, joint dense+sparse
+vectors, rerank scores and their ordering, and both dense backends' F32 bits were
+identical across four processes. That is the property the qualification needed to
+establish first: these engines are deterministic on this workload.
+
+**Performance is explicitly provisional.** The Studio was running unrelated agent
+work throughout (load average 16-30 on 24 logical CPUs), so same-binary suite
+repeats spread by 1.07x (Qwen3) to 1.69x (reranker), with per-case spread up to
+2.1x. A number like that cannot support a comparison, a regression gate or a
+"faster" claim, and none is made. The [capture](benchmarks/engine-qualification-2026-11-10.json)
+records the envelope and the load so the next run can be compared honestly.
+
+New here: `crates/vqtrs-cli/examples/engine_aux_bench.rs` gives sparse, BGE-M3 and
+rerank the same treatment `engine_bench` already gave dense models - warmups, five
+>=200 ms samples per case, per-case medians, exact repeat equality and a report
+with model identity. Before it, those three engines had no differential instrument.
+
+Re-capture on a quiet host (or admitted GPU) before quoting any latency. Open
+coverage after this tranche: the long parity case, sparse support on long inputs,
+rerank tie stability, transport paths, Qwen3 on GPU/Metal, and the Apple-native
+Gemma runtimes.
+
 ## Isolated loop state
 
 Use an isolated reversible worktree for experiments. `.auto/prompt.md` records

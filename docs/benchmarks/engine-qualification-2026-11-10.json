@@ -1,0 +1,150 @@
+{
+  "schema": "vqtrs.engine-qualification.v1",
+  "date": "2026-11-10",
+  "status": "exactness_verified_performance_provisional",
+  "scope": "First qualification baselines for the five non-EmbeddingGemma engines on the Studio (Apple M2 Ultra, 192 GB, macOS). This records reproducible outputs and a contention-limited timing baseline; it is not a speed claim.",
+  "host": {
+    "machine": "GenAIHulk.local",
+    "model": "Mac Studio",
+    "chip": "Apple M2 Ultra",
+    "memory_gb": 192,
+    "load_average_during_runs": [
+      16.1,
+      22.6,
+      29.7,
+      17.6
+    ],
+    "contention": "Heavy unrelated agent load throughout (load average 16-30 on 24 logical CPUs); numbers are a floor/ceiling envelope, not a qualified latency."
+  },
+  "build": {
+    "version": "0.4.0",
+    "commit": "b43763fb11ecdd887d107f98ae8134c2dd23e0da",
+    "toolchain": "Rust 1.97.0 locked",
+    "features": "qwen3 (dense candle); ONNX default for fastembed backends",
+    "binaries": "engine_bench (dense) and new engine_aux_bench (sparse/M3/rerank), same commit"
+  },
+  "protocol": {
+    "cases": "scripts/parity/eg2_cases_text.json short suite (18 rows incl. ragged and reversed batch)",
+    "per_run": "3 warmups, 5 samples of >=200 ms each per case, medians",
+    "across_runs": "4 separate processes per engine; outputs compared exactly across all four",
+    "noise_control": "none available on this host under current load; same-binary spread reported instead"
+  },
+  "results": {
+    "onnx-minilm": {
+      "model": "Qdrant/all-MiniLM-L6-v2-onnx",
+      "kind": "dense",
+      "rows": 18,
+      "suite_ms_median": 146.0,
+      "suite_ms_per_run": [
+        182.2,
+        135.5,
+        129.9,
+        156.5
+      ],
+      "same_binary_spread": 1.403,
+      "worst_case_spread": 2.111,
+      "changed_output_cases_across_processes": 0,
+      "load_ms_per_run": [
+        85.0,
+        91.8,
+        83.5,
+        77.9
+      ]
+    },
+    "qwen3-0.6b": {
+      "model": "Qwen/Qwen3-Embedding-0.6B",
+      "kind": "dense",
+      "rows": 18,
+      "suite_ms_median": 2926.6,
+      "suite_ms_per_run": [
+        2915.1,
+        2944.0,
+        2762.5,
+        2938.2
+      ],
+      "same_binary_spread": 1.066,
+      "worst_case_spread": 1.398,
+      "changed_output_cases_across_processes": 0,
+      "load_ms_per_run": [
+        2125.5,
+        640.7,
+        568.0,
+        623.5
+      ]
+    },
+    "sparse-splade": {
+      "model": "Qdrant/Splade_PP_en_v1",
+      "kind": "sparse",
+      "rows": 18,
+      "suite_ms_median": 648.5,
+      "suite_ms_per_run": [
+        573.5,
+        678.1,
+        725.2,
+        618.9
+      ],
+      "same_binary_spread": 1.264,
+      "worst_case_spread": 2.132,
+      "changed_output_cases_across_processes": 0,
+      "load_ms_per_run": [
+        382.3,
+        342.5,
+        376.4,
+        355.6
+      ]
+    },
+    "m3-bgem3": {
+      "model": "BAAI/bge-m3",
+      "kind": "m3",
+      "rows": 18,
+      "suite_ms_median": 693.9,
+      "suite_ms_per_run": [
+        803.0,
+        606.0,
+        702.0,
+        685.9
+      ],
+      "same_binary_spread": 1.325,
+      "worst_case_spread": 1.697,
+      "changed_output_cases_across_processes": 0,
+      "load_ms_per_run": [
+        29143.0,
+        1184.7,
+        1029.4,
+        1045.0
+      ]
+    },
+    "rerank-bge-base": {
+      "model": "BAAI/bge-reranker-base",
+      "kind": "rerank",
+      "rows": 18,
+      "suite_ms_median": 514.4,
+      "suite_ms_per_run": [
+        412.3,
+        399.5,
+        676.2,
+        616.5
+      ],
+      "same_binary_spread": 1.692,
+      "worst_case_spread": 2.047,
+      "changed_output_cases_across_processes": 0,
+      "load_ms_per_run": [
+        1089.8,
+        1048.9,
+        1113.2,
+        1074.6
+      ]
+    }
+  },
+  "verdict": {
+    "exactness": "PASS - SPLADE sparse indices/weights, BGE-M3 dense+sparse, rerank scores and order, ONNX dense bits and Qwen3 dense bits were identical across four independent processes per engine.",
+    "performance": "PROVISIONAL - same-binary suite spread is 1.07x (Qwen3) to 1.69x (reranker) and worst-case per-case spread reaches 2.1x under load. No engine comparison or regression gate may be derived from this capture.",
+    "gate": "Re-capture on a quiet host or admitted GPU before any performance statement, and keep these values only as the exactness baseline."
+  },
+  "limits": [
+    "Local Studio under heavy unrelated load; a busy host is not a benchmark host.",
+    "Short suite only; the t_long parity case, sparse support/weight preservation on long inputs, rerank tie stability and transport behaviour are not covered here.",
+    "Qwen3 ran on CPU with the candle backend; GPU/Metal variants and Apple-native Gemma runtimes remain unqualified.",
+    "No model, prompt, dtype or context change; no production install in this step."
+  ]
+}
