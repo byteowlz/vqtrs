@@ -255,35 +255,47 @@ text backend candidate, not an approved lossless replacement. No production code
 or dependencies were changed. The lease is released; frozen evidence lives in
 `vqtrs-fastembed-eg2-compare/v1`.
 
-## Engine qualification: first five-engine baseline (2026-11-10)
+## Engine qualification: five-engine baseline (2026-11-11)
 
-Stage one of the remaining qualification work covers the engines that had no
-measured baseline: ONNX dense (MiniLM), Qwen3-Embedding 0.6B (candle CPU),
-SPLADE sparse, BGE-M3 dense+sparse, and the BGE reranker. Each engine ran four
-separate processes over the existing short parity suite, and every output was
-compared **exactly** across processes.
+The five engines that had no measured baseline now have one: ONNX dense (MiniLM),
+Qwen3-Embedding 0.6B (candle CPU), SPLADE sparse, BGE-M3 dense+sparse, and the BGE
+reranker. Each ran four separate processes over the short parity suite, twice: once
+while the host carried unrelated agent work, once in a quiet window.
 
-**Exactness passes for all five.** Sparse indices and weights, joint dense+sparse
-vectors, rerank scores and their ordering, and both dense backends' F32 bits were
-identical across four processes. That is the property the qualification needed to
-establish first: these engines are deterministic on this workload.
+**Exactness passes everywhere, and it is a strong result.** Outputs were identical
+across processes *and* across host load for all five engines and all eight cases -
+sparse indices and weights, joint dense+sparse vectors, rerank scores and their
+ordering, and both dense backends' F32 bits (dense token counts too). Load changes
+timing, not output.
 
-**Performance is explicitly provisional.** The Studio was running unrelated agent
-work throughout (load average 16-30 on 24 logical CPUs), so same-binary suite
-repeats spread by 1.07x (Qwen3) to 1.69x (reranker), with per-case spread up to
-2.1x. A number like that cannot support a comparison, a regression gate or a
-"faster" claim, and none is made. The [capture](benchmarks/engine-qualification-2026-11-10.json)
-records the envelope and the load so the next run can be compared honestly.
+**Timing now has a usable baseline, and a measured noise floor:**
 
-New here: `crates/vqtrs-cli/examples/engine_aux_bench.rs` gives sparse, BGE-M3 and
-rerank the same treatment `engine_bench` already gave dense models - warmups, five
->=200 ms samples per case, per-case medians, exact repeat equality and a report
-with model identity. Before it, those three engines had no differential instrument.
+| Engine | Quiet-window suite | Same-binary spread | Loaded-host spread |
+| --- | ---: | ---: | ---: |
+| ONNX MiniLM | 70.8 ms | 1.00x | 1.40x |
+| Qwen3-Embedding 0.6B (CPU) | 1694.4 ms | 1.04x | 1.07x |
+| SPLADE | 331.3 ms | 1.01x | 1.26x |
+| BGE-M3 dense+sparse | 503.6 ms | 1.01x | 1.33x |
+| BGE reranker | 297.9 ms | 1.02x | 1.69x |
 
-Re-capture on a quiet host (or admitted GPU) before quoting any latency. Open
-coverage after this tranche: the long parity case, sparse support on long inputs,
-rerank tie stability, transport paths, Qwen3 on GPU/Metal, and the Apple-native
-Gemma runtimes.
+The quiet capture started at load ~3.0 on 24 logical CPUs; unrelated work resumed
+towards the end (12.9), which is exactly why the table reports spread rather than a
+single confident number. Under 16-30 load the same binaries spread 1.07x-1.69x, so a
+loaded capture cannot gate a change. Compare future work against the quiet capture,
+at comparable load, per case.
+
+New instrument: `crates/vqtrs-cli/examples/engine_aux_bench.rs` gives sparse, BGE-M3
+and rerank the same treatment `engine_bench` already gave dense models - warmups,
+five >=200 ms samples per case, per-case medians, exact repeat equality and model
+identity in the report. Evidence:
+[quiet-window baseline](benchmarks/engine-qualification-2026-11-11.json), which
+supersedes the [first loaded capture](benchmarks/engine-qualification-2026-11-10.json)
+kept for the noise comparison.
+
+Still uncovered: the long parity case, sparse support on long inputs, rerank tie
+stability, transport paths, and the Apple-native Gemma runtimes. GPU/CUDA/TensorRT
+coverage is **blocked, not passed** - the GB10 loaner was returned on 2026-11-10 and
+no CUDA host exists.
 
 ## Isolated loop state
 

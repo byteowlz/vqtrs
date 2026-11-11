@@ -1,0 +1,200 @@
+{
+  "schema": "vqtrs.engine-qualification.v1",
+  "date": "2026-11-11",
+  "status": "exactness_and_quiet_window_baseline",
+  "scope": "Baseline for the five non-EmbeddingGemma engines on the Studio: ONNX dense, Qwen3-Embedding 0.6B (candle CPU), SPLADE sparse, BGE-M3 dense+sparse, BGE reranker. Captured twice - once under heavy unrelated load, once in a quiet window - so the difference is measured rather than assumed.",
+  "host": {
+    "machine": "GenAIHulk.local",
+    "model": "Mac Studio",
+    "chip": "Apple M2 Ultra",
+    "memory_gb": 192,
+    "quiet_window_load": {
+      "start": [
+        3.0,
+        3.28,
+        3.46
+      ],
+      "end": [
+        12.89,
+        7.33,
+        5.1
+      ],
+      "note": "Runs started at load ~3.0 on 24 logical CPUs; unrelated work resumed near the end, which is why the report keeps the spread instead of a single number."
+    },
+    "loaded_window_load": [
+      16.1,
+      22.6,
+      29.7,
+      17.6
+    ]
+  },
+  "build": {
+    "version": "0.4.0",
+    "commit": "708ab7ae2b15e60815144a17d3ae18beca90d7f",
+    "toolchain": "Rust 1.97.0 locked",
+    "features": "qwen3 (dense candle); ONNX default for fastembed backends",
+    "binaries": "engine_bench (dense) and engine_aux_bench (sparse/M3/rerank)"
+  },
+  "protocol": {
+    "cases": "scripts/parity/eg2_cases_text.json short suite (18 rows incl. ragged and reversed batch)",
+    "per_run": "3 warmups, 5 samples of >=200 ms each per case, medians",
+    "across_runs": "4 separate processes per engine per capture; outputs compared exactly within and across captures",
+    "noise_control": "two captures at different host load; same-binary spread reported for each"
+  },
+  "quiet_window": {
+    "onnx-minilm": {
+      "model": "Qdrant/all-MiniLM-L6-v2-onnx",
+      "kind": "dense",
+      "rows": 18,
+      "suite_ms_median": 70.8,
+      "suite_ms_per_run": [
+        71.0,
+        70.8,
+        70.7,
+        70.8
+      ],
+      "same_binary_spread": 1.004,
+      "worst_case_spread": 1.029,
+      "changed_output_cases_across_processes": 0,
+      "load_ms_per_run": [
+        100.1,
+        67.1,
+        65.1,
+        67.2
+      ]
+    },
+    "qwen3-0.6b": {
+      "model": "Qwen/Qwen3-Embedding-0.6B",
+      "kind": "dense",
+      "rows": 18,
+      "suite_ms_median": 1694.4,
+      "suite_ms_per_run": [
+        1690.7,
+        1698.1,
+        1742.7,
+        1679.1
+      ],
+      "same_binary_spread": 1.038,
+      "worst_case_spread": 1.204,
+      "changed_output_cases_across_processes": 0,
+      "load_ms_per_run": [
+        1601.6,
+        473.0,
+        499.2,
+        449.3
+      ]
+    },
+    "sparse-splade": {
+      "model": "Qdrant/Splade_PP_en_v1",
+      "kind": "sparse",
+      "rows": 18,
+      "suite_ms_median": 331.3,
+      "suite_ms_per_run": [
+        331.3,
+        332.7,
+        329.4,
+        331.2
+      ],
+      "same_binary_spread": 1.01,
+      "worst_case_spread": 1.059,
+      "changed_output_cases_across_processes": 0,
+      "load_ms_per_run": [
+        342.4,
+        292.8,
+        282.2,
+        279.0
+      ]
+    },
+    "m3-bgem3": {
+      "model": "BAAI/bge-m3",
+      "kind": "m3",
+      "rows": 18,
+      "suite_ms_median": 503.6,
+      "suite_ms_per_run": [
+        504.3,
+        507.1,
+        500.2,
+        502.9
+      ],
+      "same_binary_spread": 1.014,
+      "worst_case_spread": 1.041,
+      "changed_output_cases_across_processes": 0,
+      "load_ms_per_run": [
+        873.4,
+        820.6,
+        828.7,
+        819.1
+      ]
+    },
+    "rerank-bge-base": {
+      "model": "BAAI/bge-reranker-base",
+      "kind": "rerank",
+      "rows": 18,
+      "suite_ms_median": 297.9,
+      "suite_ms_per_run": [
+        298.9,
+        296.8,
+        301.3,
+        296.1
+      ],
+      "same_binary_spread": 1.018,
+      "worst_case_spread": 1.066,
+      "changed_output_cases_across_processes": 0,
+      "load_ms_per_run": [
+        864.1,
+        840.3,
+        815.8,
+        819.6
+      ]
+    }
+  },
+  "loaded_window": {
+    "onnx-minilm": {
+      "suite_ms_median": 146.0,
+      "same_binary_spread": 1.403,
+      "worst_case_spread": 2.111,
+      "changed_output_cases_across_processes": 0
+    },
+    "qwen3-0.6b": {
+      "suite_ms_median": 2926.6,
+      "same_binary_spread": 1.066,
+      "worst_case_spread": 1.398,
+      "changed_output_cases_across_processes": 0
+    },
+    "sparse-splade": {
+      "suite_ms_median": 648.5,
+      "same_binary_spread": 1.264,
+      "worst_case_spread": 2.132,
+      "changed_output_cases_across_processes": 0
+    },
+    "m3-bgem3": {
+      "suite_ms_median": 693.9,
+      "same_binary_spread": 1.325,
+      "worst_case_spread": 1.697,
+      "changed_output_cases_across_processes": 0
+    },
+    "rerank-bge-base": {
+      "suite_ms_median": 514.4,
+      "same_binary_spread": 1.692,
+      "worst_case_spread": 2.047,
+      "changed_output_cases_across_processes": 0
+    }
+  },
+  "determinism": {
+    "within_process": "every timed call re-checked against the first result",
+    "across_processes": "4/4 processes identical for all five engines, in both captures",
+    "across_host_load": "quiet-window capture is bit-identical to the loaded capture for all five engines and all 8 cases; dense token counts identical too",
+    "meaning": "These engines are deterministic on this workload; load changes timing, not output."
+  },
+  "verdict": {
+    "exactness": "PASS - outputs invariant across processes and across host load.",
+    "performance": "Baseline usable for the five engines on this host: quiet-window same-binary spread is 1.00x (ONNX) to 1.04x (Qwen3), worst per-case 1.03x-1.20x. Under 16-30 load the same binaries spread 1.07x-1.69x, so loaded numbers cannot gate anything.",
+    "use": "Compare future changes only against the quiet-window capture, on a host at comparable load, and keep per-case ratios - not one aggregate."
+  },
+  "limits": [
+    "Short suite only; t_long, sparse support on long inputs, rerank tie stability and transport paths are not covered here.",
+    "Qwen3 ran on CPU with the candle backend. No CUDA host exists any more (zgx GB10 loaner returned 2026-11-10), so GPU/CUDA/TensorRT coverage is blocked, not skipped-and-passed.",
+    "Apple-native Gemma runtimes (CoreML/MLX) remain separately gated and unmeasured here.",
+    "No model, prompt, dtype or context change; no production change in this capture."
+  ]
+}
