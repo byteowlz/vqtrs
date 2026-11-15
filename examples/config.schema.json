@@ -29,10 +29,10 @@
       "minimum": 0
     },
     "max_loaded": {
-      "description": "Max models kept loaded per backend; `0` = unbounded. Warm models are\npinned and do not count toward eviction.",
+      "description": "Max models kept loaded per backend (dense, rerank, sparse, BGE-M3), evicted\nleast-recently-used beyond the cap. Warm models are pinned: they are never\nevicted, but they do occupy slots. `0` disables the bound and is only safe\nfor a deliberately fixed model set, since resident memory then grows with\nevery distinct model requested.\n\nThis caps model *count*, not bytes: size it against the heaviest model you\nallow (one Qwen3-Embedding-8B on the CPU F32 path is tens of GB alone).",
       "type": "integer",
       "format": "uint",
-      "default": 0,
+      "default": 4,
       "minimum": 0
     },
     "model": {

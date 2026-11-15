@@ -25,6 +25,9 @@ no_socket = false
 
 # Multi-model gateway. The server honours each request's `model` field, loading
 # models on demand and keeping them warm. `warm` models are preloaded at startup
-# and never evicted; `max_loaded` caps the rest per backend (0 = unbounded).
+# and never evicted; `max_loaded` caps resident models per backend (warm models
+# occupy slots), evicting least-recently-used. It caps COUNT, not bytes: size it
+# against the heaviest model you allow. 0 = unbounded (only for a fixed model set).
+# CLI: --max-loaded / VQTRS_MAX_LOADED.
 warm       = []
-max_loaded = 0
+max_loaded = 4

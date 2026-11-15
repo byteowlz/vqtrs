@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+### Fixed
+
+- The API's model registry is now bounded by default: `max_loaded` defaults to 4
+  per backend instead of `0` (unbounded), so a server with no config file can no
+  longer keep every requested model resident (the ~91-97 GB incident behind
+  vqtrs-616k). New `--max-loaded` / `VQTRS_MAX_LOADED` flag, a startup warning when
+  `0` is chosen explicitly, and per-backend resident counts in `/health`. The cap
+  counts models, not bytes; explicit `max_loaded = 0` configs keep their meaning.
+
 ## [0.4.0] - 2026-10-30
 
 Minor release for additive core APIs and qualified CUDA performance improvements.

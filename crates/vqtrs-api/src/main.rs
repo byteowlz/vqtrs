@@ -23,7 +23,7 @@ use axum::{
     routing::{get, post},
 };
 use clap::Parser;
-use log::info;
+use log::{info, warn};
 use serde::{Deserialize, Serialize};
 use tokio::sync::Semaphore;
 use tower_http::cors::{Any, CorsLayer};
@@ -69,7 +69,12 @@ async fn try_main() -> Result<()> {
             .or_else(|| (!cfg.socket.is_empty()).then(|| PathBuf::from(&cfg.socket))),
     )?;
 
-    let max_loaded = cfg.max_loaded;
+    let max_loaded = cli.max_loaded.unwrap_or(cfg.max_loaded);
+    if max_loaded == 0 {
+        warn!(
+            "max_loaded=0: model registry is unbounded; every distinct model requested stays resident"
+        );
+    }
     let warm = cfg.warm;
     // A semaphore with zero permits would reject everything forever, so the
     // effective floor is 1.
@@ -110,6 +115,7 @@ async fn try_main() -> Result<()> {
         inflight: Arc::new(Semaphore::new(max_inflight)),
         max_inflight,
         max_batch_texts,
+        max_loaded,
     };
 
     let cors = CorsLayer::new()
@@ -187,6 +193,9 @@ struct Cli {
     /// Max texts accepted in one request (see config)
     #[arg(long, env = "VQTRS_MAX_BATCH_TEXTS")]
     max_batch_texts: Option<usize>,
+    /// Max models kept loaded per backend; 0 = unbounded (see config)
+    #[arg(long, env = "VQTRS_MAX_LOADED")]
+    max_loaded: Option<usize>,
 }
 
 /// Shared server state: a keep-warm registry per backend plus the default model
@@ -207,6 +216,8 @@ struct AppState {
     max_inflight: usize,
     /// Cap on texts per request.
     max_batch_texts: usize,
+    /// Cap on resident models per backend (`0` = unbounded), for reporting.
+    max_loaded: usize,
 }
 
 /// Choose the request's model when present and non-empty, else the default.
@@ -348,6 +359,18 @@ struct HealthResponse {
     status: &'static str,
     in_flight: usize,
     max_in_flight: usize,
+    /// Per-backend model cap; `0` means unbounded.
+    max_loaded: usize,
+    loaded: LoadedModels,
+}
+
+/// Resident model count per backend, so the registry bound is observable.
+#[derive(Serialize)]
+struct LoadedModels {
+    dense: usize,
+    rerank: usize,
+    sparse: usize,
+    m3: usize,
 }
 
 /// Liveness + capacity. Answers `200` while the inference path can accept
@@ -360,6 +383,13 @@ async fn health(State(state): State<AppState>) -> Response {
         status: if saturated { "saturated" } else { "ok" },
         in_flight: state.max_inflight - available,
         max_in_flight: state.max_inflight,
+        max_loaded: state.max_loaded,
+        loaded: LoadedModels {
+            dense: state.dense.loaded(),
+            rerank: state.rerankers.loaded(),
+            sparse: state.sparse.loaded(),
+            m3: state.m3.loaded(),
+        },
     });
     let status = if saturated {
         StatusCode::SERVICE_UNAVAILABLE
@@ -691,4 +721,19 @@ fn join_error(err: &tokio::task::JoinError) -> ApiError {
         StatusCode::INTERNAL_SERVER_ERROR,
         format!("inference task failed: {err}"),
     )
+}
+
+#[cfg(test)]
+mod cli_tests {
+    use super::*;
+
+    #[test]
+    fn max_loaded_flag_parses_and_is_optional() {
+        let cli = Cli::try_parse_from(["vqtrs-api", "--max-loaded", "2"]).unwrap();
+        assert_eq!(cli.max_loaded, Some(2));
+        let bare = Cli::try_parse_from(["vqtrs-api"]).unwrap();
+        // `None` here means "use the config value", which defaults to bounded.
+        assert!(bare.max_loaded.is_none() || std::env::var_os("VQTRS_MAX_LOADED").is_some());
+        assert!(Cli::try_parse_from(["vqtrs-api", "--max-loaded", "-1"]).is_err());
+    }
 }

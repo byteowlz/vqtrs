@@ -66,6 +66,17 @@ impl<T> Registry<T> {
         self.insert(key, model, true)
     }
 
+    /// Number of models currently resident, for health reporting.
+    ///
+    /// A poisoned lock still holds a consistent map (no operation leaves it
+    /// half-updated), so the count is read through the poison.
+    pub fn loaded(&self) -> usize {
+        self.inner.lock().map_or_else(
+            |poisoned| poisoned.into_inner().models.len(),
+            |g| g.models.len(),
+        )
+    }
+
     fn touch_existing(&self, key: &str) -> Result<Option<Arc<T>>> {
         let mut guard = self.lock()?;
         let model = guard.models.get(key).cloned();
@@ -128,5 +139,64 @@ fn move_to_back(lru: &mut Vec<String>, key: &str) {
     if let Some(pos) = lru.iter().position(|k| k == key) {
         let key = lru.remove(pos);
         lru.push(key);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn load(registry: &Registry<String>, key: &str) -> Arc<String> {
+        registry.get_or_load(key, || Ok(key.to_owned())).unwrap()
+    }
+
+    #[test]
+    fn bounded_registry_never_exceeds_max_and_evicts_least_recent() {
+        let registry = Registry::new(2);
+        for key in ["a", "b", "c", "d", "e"] {
+            load(&registry, key);
+            assert!(registry.loaded() <= 2, "count exceeded bound after {key}");
+        }
+        // Touch "d" so "e" becomes least recent, then load "f".
+        load(&registry, "d");
+        load(&registry, "f");
+        let resident: HashSet<String> = registry.lock().unwrap().models.keys().cloned().collect();
+        assert_eq!(resident, HashSet::from(["d".to_owned(), "f".to_owned()]));
+    }
+
+    #[test]
+    fn pinned_models_survive_eviction_and_occupy_slots() {
+        let registry = Registry::new(2);
+        registry
+            .load_pinned("warm", || Ok("warm".to_owned()))
+            .unwrap();
+        for key in ["a", "b", "c"] {
+            let model = load(&registry, key);
+            // The request still gets its model even if it is evicted right after.
+            assert_eq!(*model, key);
+            assert!(registry.loaded() <= 2);
+        }
+        let resident: HashSet<String> = registry.lock().unwrap().models.keys().cloned().collect();
+        assert!(resident.contains("warm"));
+        assert!(resident.contains("c"));
+    }
+
+    #[test]
+    fn zero_is_an_explicit_unbounded_opt_out() {
+        let registry = Registry::new(0);
+        for key in ["a", "b", "c", "d", "e"] {
+            load(&registry, key);
+        }
+        assert_eq!(registry.loaded(), 5);
+    }
+
+    #[test]
+    fn reloading_a_resident_model_does_not_call_the_loader() {
+        let registry = Registry::new(2);
+        load(&registry, "a");
+        let again = registry
+            .get_or_load("a", || panic!("resident model reloaded"))
+            .unwrap();
+        assert_eq!(*again, "a");
     }
 }

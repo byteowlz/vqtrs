@@ -125,8 +125,10 @@ native-target tests and Intel macOS runtime packaging.
 
 **Multi-model gateway:** the server honours each request's `model` field —
 models load on demand and stay warm, so a single server serves many models (and
-the CLI routes any `--model` to it). Preload a set with `warm` and cap the rest
-with `max_loaded` in the config. `usage.prompt_tokens` is a real tokenizer count.
+the CLI routes any `--model` to it). Preload a set with `warm`; `max_loaded`
+(default 4 per backend, `--max-loaded` / `VQTRS_MAX_LOADED`) evicts the
+least-recently-used rest. It caps model count, not bytes, and `/health` reports the
+resident count per backend. `usage.prompt_tokens` is a real tokenizer count.
 
 OpenAI-compatible embeddings — works with any OpenAI client by pointing
 `base_url` at it:

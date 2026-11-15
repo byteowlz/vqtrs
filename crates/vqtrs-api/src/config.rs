@@ -10,6 +10,12 @@ use anyhow::{Context, Result};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
+/// Default cap on models kept loaded per backend.
+///
+/// A server with no config file must not accumulate every model a workload
+/// touches: an unbounded registry reached ~91-97 GB on the Studio (vqtrs-616k).
+pub const DEFAULT_MAX_LOADED: usize = 4;
+
 /// On-disk server configuration. Every field has a default, so a partial or
 /// absent file is fine.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -34,8 +40,14 @@ pub struct ServerConfig {
     /// Extra embedding models to preload at startup and keep warm (never
     /// evicted). The default `model` is always warm.
     pub warm: Vec<String>,
-    /// Max models kept loaded per backend; `0` = unbounded. Warm models are
-    /// pinned and do not count toward eviction.
+    /// Max models kept loaded per backend (dense, rerank, sparse, BGE-M3), evicted
+    /// least-recently-used beyond the cap. Warm models are pinned: they are never
+    /// evicted, but they do occupy slots. `0` disables the bound and is only safe
+    /// for a deliberately fixed model set, since resident memory then grows with
+    /// every distinct model requested.
+    ///
+    /// This caps model *count*, not bytes: size it against the heaviest model you
+    /// allow (one Qwen3-Embedding-8B on the CPU F32 path is tens of GB alone).
     pub max_loaded: usize,
     /// Max inference tasks in flight across all endpoints. Requests beyond the
     /// cap are rejected with `429` + `Retry-After` instead of queueing, so the
@@ -65,7 +77,7 @@ impl Default for ServerConfig {
             socket: String::new(),
             no_socket: false,
             warm: Vec::new(),
-            max_loaded: 0,
+            max_loaded: DEFAULT_MAX_LOADED,
             max_inflight: 4,
             max_batch_texts: 256,
         }
@@ -105,4 +117,33 @@ impl ServerConfig {
 /// `$XDG_CONFIG_HOME/vqtrs/config.toml` (or the platform config dir).
 fn default_config_path() -> Option<PathBuf> {
     dirs::config_dir().map(|dir| dir.join("vqtrs").join("config.toml"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn absent_and_partial_configs_are_bounded() {
+        assert_eq!(ServerConfig::default().max_loaded, DEFAULT_MAX_LOADED);
+        let partial: ServerConfig = toml::from_str("port = 9000").unwrap();
+        assert_eq!(partial.max_loaded, DEFAULT_MAX_LOADED);
+        assert_ne!(DEFAULT_MAX_LOADED, 0, "the safe default must be bounded");
+    }
+
+    #[test]
+    fn missing_config_file_falls_back_to_bounded_defaults() {
+        let missing = std::env::temp_dir().join("vqtrs-616k-definitely-missing/config.toml");
+        assert!(!missing.exists());
+        let cfg = ServerConfig::load(Some(&missing)).unwrap();
+        assert_eq!(cfg.max_loaded, DEFAULT_MAX_LOADED);
+    }
+
+    #[test]
+    fn explicit_values_including_zero_are_respected() {
+        let cfg: ServerConfig = toml::from_str("max_loaded = 8").unwrap();
+        assert_eq!(cfg.max_loaded, 8);
+        let opt_out: ServerConfig = toml::from_str("max_loaded = 0").unwrap();
+        assert_eq!(opt_out.max_loaded, 0);
+    }
 }
